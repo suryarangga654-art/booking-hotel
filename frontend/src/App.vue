@@ -1,7 +1,11 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+import Navbar from './views/Navbar.vue'
 </script>
 
 <template>
-  <HelloWorld />
+  <Navbar />
+
+  <main>
+    <router-view />
+  </main>
 </template>
