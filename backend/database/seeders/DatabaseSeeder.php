@@ -3,23 +3,30 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\Room;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // 1. MEMBUAT DATA USER (ADMIN & CUSTOMER CONTOH)
+        User::create([
+            'name' => 'Administrator Hotel',
+            'email' => 'admin@hotel.com',
+            'password' => Hash::make('password'), // Password otomatis di-hash aman
+            'role' => 'admin',
+        ]);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        User::create([
+            'name' => 'Budi Santoso',
+            'email' => 'budi@gmail.com',
+            'password' => Hash::make('user123'),
+            'role' => 'tamu',
         ]);
     }
 }

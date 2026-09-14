@@ -3,28 +3,42 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
+use App\Models\DetailPemesanan;
+use App\Models\Pembayaran;
+use App\Models\Ulasan;
 
 class Pemesanan extends Model
 {
-    protected $table = 'pemesanans';
+    protected $table = 'pemesanan';
+
+    public $timestamps = false;
 
     protected $fillable = [
-        'user_id',
-        'kamar_id',
-        'tanggal_checkin',
-        'tanggal_checkout',
-        'jumlah_tamu',
-        'total_harga',
-        'status',
+        'kode_pemesanan',
+        'users_id',
+        'jumlah_total',
+        'status_pemesanan',
+        'status_pembayaran',
     ];
 
-    public function user()
+    public function pengguna()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'users_id');
     }
 
-    public function kamar()
+    public function detailPemesanan()
     {
-        return $this->belongsTo(Kamar::class);
+        return $this->hasMany(DetailPemesanan::class, 'pemesanan_id');
+    }
+
+    public function pembayaran()
+    {
+        return $this->hasOne(Pembayaran::class, 'pemesanan_id');
+    }
+
+    public function ulasan()
+    {
+        return $this->hasOne(Ulasan::class, 'pemesanan_id');
     }
 }
