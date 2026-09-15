@@ -1,37 +1,40 @@
 <?php
-namespace App\Http\Controllers\Api;
+
+namespace App\Http\Controllers\Api\Resepsionis;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pemesanan;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class PemesananController extends Controller
 {
-    // Menampilkan semua pemesanan
+    /**
+     * GET /api/resepsionis/pemesanan
+     */
     public function index()
     {
         $pemesanan = Pemesanan::with([
-            'pengguna',
-            'detailPemesanan',
-            'pembayaran',
-            'ulasan'
-        ])->latest('id')->get();
+            'user',
+            'pembayaran'
+        ])
+        ->orderByDesc('id')
+        ->get();
 
         return response()->json([
             'success' => true,
+            'message' => 'Data pemesanan berhasil diambil',
             'data' => $pemesanan
         ]);
     }
 
-    // Menampilkan satu pemesanan
+    /**
+     * GET /api/resepsionis/pemesanan/{id}
+     */
     public function show($id)
     {
         $pemesanan = Pemesanan::with([
-            'pengguna',
-            'detailPemesanan',
-            'pembayaran',
-            'ulasan'
+            'user',
+            'pembayaran'
         ])->find($id);
 
         if (!$pemesanan) {
@@ -43,36 +46,48 @@ class PemesananController extends Controller
 
         return response()->json([
             'success' => true,
+            'message' => 'Detail pemesanan berhasil diambil',
             'data' => $pemesanan
         ]);
     }
 
-    // Menambahkan pemesanan
+    /**
+     * POST /api/resepsionis/pemesanan
+     */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'users_id' => 'required|exists:users,id',
-            'jumlah_total' => 'required|integer|min:1',
+            'jumlah_total' => 'required|integer|min:0',
             'status_pemesanan' => 'nullable|in:menunggu,dikonfirmasi,check_in,check_out,dibatalkan',
             'status_pembayaran' => 'nullable|in:belum_dibayar,dibayar_sebagian,lunas,dikembalikan',
         ]);
 
-        $pemesanan = Pemesanan::create([
-            'kode_pemesanan' => 'BOOK-' . strtoupper(Str::random(8)),
-            'users_id' => $request->users_id,
-            'jumlah_total' => $request->jumlah_total,
-            'status_pemesanan' => $request->status_pemesanan ?? 'menunggu',
-            'status_pembayaran' => $request->status_pembayaran ?? 'belum_dibayar',
+        $validated['kode_pemesanan'] = $this->generateKodePemesanan();
+
+        $validated['status_pemesanan'] =
+            $validated['status_pemesanan'] ?? 'menunggu';
+
+        $validated['status_pembayaran'] =
+            $validated['status_pembayaran'] ?? 'belum_dibayar';
+
+        $pemesanan = Pemesanan::create($validated);
+
+        $pemesanan->load([
+            'user',
+            'pembayaran'
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Pemesanan berhasil ditambahkan',
+            'message' => 'Pemesanan berhasil dibuat',
             'data' => $pemesanan
         ], 201);
     }
 
-    // Mengubah pemesanan
+    /**
+     * PUT /api/resepsionis/pemesanan/{id}
+     */
     public function update(Request $request, $id)
     {
         $pemesanan = Pemesanan::find($id);
@@ -84,18 +99,18 @@ class PemesananController extends Controller
             ], 404);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'users_id' => 'required|exists:users,id',
-            'jumlah_total' => 'required|integer|min:1',
+            'jumlah_total' => 'required|integer|min:0',
             'status_pemesanan' => 'required|in:menunggu,dikonfirmasi,check_in,check_out,dibatalkan',
             'status_pembayaran' => 'required|in:belum_dibayar,dibayar_sebagian,lunas,dikembalikan',
         ]);
 
-        $pemesanan->update([
-            'users_id' => $request->users_id,
-            'jumlah_total' => $request->jumlah_total,
-            'status_pemesanan' => $request->status_pemesanan,
-            'status_pembayaran' => $request->status_pembayaran,
+        $pemesanan->update($validated);
+
+        $pemesanan->load([
+            'user',
+            'pembayaran'
         ]);
 
         return response()->json([
@@ -105,7 +120,9 @@ class PemesananController extends Controller
         ]);
     }
 
-    // Menghapus pemesanan
+    /**
+     * DELETE /api/resepsionis/pemesanan/{id}
+     */
     public function destroy($id)
     {
         $pemesanan = Pemesanan::find($id);
@@ -123,5 +140,14 @@ class PemesananController extends Controller
             'success' => true,
             'message' => 'Pemesanan berhasil dihapus'
         ]);
+    }
+
+    private function generateKodePemesanan()
+    {
+        do {
+            $kode = 'PSN-' . strtoupper(\Illuminate\Support\Str::random(8));
+        } while (Pemesanan::where('kode_pemesanan', $kode)->exists());
+
+        return $kode;
     }
 }

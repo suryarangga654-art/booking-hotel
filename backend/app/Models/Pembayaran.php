@@ -17,6 +17,7 @@ class Pembayaran extends Model
         'jumlah_bayar',
         'status',
         'waktu_bayar',
+        'bukti_transfer'
     ];
 
     protected $casts = [

@@ -10,21 +10,31 @@ class CheckRole
 {
     /**
      * Handle an incoming request.
-     *
-     * @param  Closure(Request): (Response)  $next
      */
-    public function handle(Request $request, Closure $next): Response
-    {
-        if (!$request->user) {
+    public function handle(
+        Request $request,
+        Closure $next,
+        ...$roles
+    ): Response {
+        // Pastikan user sudah login
+        if (!$request->user()) {
             return response()->json([
-                'message' => 'Unauthorized / Belum login',
+                'success' => false,
+                'message' => 'Unauthenticated'
             ], 401);
         }
-        if (!in_array($request->user()->role, ['admin', 'resepsionis'])) {
+
+        // Ambil role user
+        $userRole = $request->user()->role;
+
+        // Cek apakah role user diperbolehkan
+        if (!in_array($userRole, $roles)) {
             return response()->json([
-                'message' => 'Forbidden / Akses ditolak',
+                'success' => false,
+                'message' => 'Anda tidak memiliki akses ke halaman ini'
             ], 403);
         }
+
         return $next($request);
     }
 }

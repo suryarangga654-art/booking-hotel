@@ -2,14 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\User;
-use App\Models\DetailPemesanan;
-use App\Models\Pembayaran;
-use App\Models\Ulasan;
 
 class Pemesanan extends Model
 {
+    use HasFactory;
+
     protected $table = 'pemesanan';
 
     public $timestamps = false;
@@ -22,23 +21,24 @@ class Pemesanan extends Model
         'status_pembayaran',
     ];
 
-    public function pengguna()
+    protected $casts = [
+        'jumlah_total' => 'integer',
+        'created_at' => 'datetime',
+    ];
+
+    /**
+     * Relasi ke user
+     */
+    public function user()
     {
         return $this->belongsTo(User::class, 'users_id');
     }
 
-    public function detailPemesanan()
-    {
-        return $this->hasMany(DetailPemesanan::class, 'pemesanan_id');
-    }
-
+    /**
+     * Relasi ke pembayaran
+     */
     public function pembayaran()
     {
-        return $this->hasOne(Pembayaran::class, 'pemesanan_id');
-    }
-
-    public function ulasan()
-    {
-        return $this->hasOne(Ulasan::class, 'pemesanan_id');
+        return $this->hasMany(Pembayaran::class, 'pemesanan_id');
     }
 }

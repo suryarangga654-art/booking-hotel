@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pembayaran;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class PembayaranController extends Controller
 {
@@ -50,7 +51,15 @@ class PembayaranController extends Controller
             'jumlah_bayar' => 'required|integer',
             'status' => 'required|string|max:50',
             'waktu_bayar' => 'nullable|date',
+            'bukti_transfer' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
+
+        $buktiTransfer = null;
+
+        if ($request->hasFile('bukti_transfer')) {
+            $buktiTransfer = $request->file('bukti_transfer')
+                ->store('bukti_transfer', 'public');
+        }
 
         $pembayaran = Pembayaran::create([
             'pemesanan_id' => $request->pemesanan_id,
@@ -59,6 +68,7 @@ class PembayaranController extends Controller
             'jumlah_bayar' => $request->jumlah_bayar,
             'status' => $request->status,
             'waktu_bayar' => $request->waktu_bayar,
+            'bukti_transfer' => $buktiTransfer,
         ]);
 
         return response()->json([
@@ -87,16 +97,32 @@ class PembayaranController extends Controller
             'jumlah_bayar' => 'required|integer',
             'status' => 'required|string|max:50',
             'waktu_bayar' => 'nullable|date',
+            'bukti_transfer' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        $pembayaran->update([
+        $data = [
             'pemesanan_id' => $request->pemesanan_id,
             'metode_pembayaran' => $request->metode_pembayaran,
             'nomor_transaksi' => $request->nomor_transaksi,
             'jumlah_bayar' => $request->jumlah_bayar,
             'status' => $request->status,
             'waktu_bayar' => $request->waktu_bayar,
-        ]);
+        ];
+
+        // Jika upload bukti transfer baru
+        if ($request->hasFile('bukti_transfer')) {
+
+            // Hapus file lama
+            if ($pembayaran->bukti_transfer) {
+                Storage::disk('public')->delete($pembayaran->bukti_transfer);
+            }
+
+            // Simpan file baru
+            $data['bukti_transfer'] = $request->file('bukti_transfer')
+                ->store('bukti_transfer', 'public');
+        }
+
+        $pembayaran->update($data);
 
         return response()->json([
             'success' => true,
@@ -115,6 +141,11 @@ class PembayaranController extends Controller
                 'success' => false,
                 'message' => 'Pembayaran tidak ditemukan'
             ], 404);
+        }
+
+        // Hapus bukti transfer
+        if ($pembayaran->bukti_transfer) {
+            Storage::disk('public')->delete($pembayaran->bukti_transfer);
         }
 
         $pembayaran->delete();

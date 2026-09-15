@@ -28,7 +28,7 @@ return new class extends Migration
                 'gagal',
                 'kedaluwarsa'
             ])->default('menunggu');
-
+            $table->string('bukti_transfer')->nullable();
             $table->timestamp('waktu_bayar')->nullable();
 
             // Foreign key

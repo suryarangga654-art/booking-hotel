@@ -21,6 +21,12 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('password'), // Password otomatis di-hash aman
             'role' => 'admin',
         ]);
+        User::create([
+            'name' => 'Resepsionis Hotel',
+            'email' => 'resepsionis@hotel.com',
+            'password' => Hash::make('password'),
+            'role' => 'resepsionis',
+        ]);
 
         User::create([
             'name' => 'Budi Santoso',
