@@ -13,6 +13,17 @@ const toast = ref('')
 const kamarList = ref([])
 const tipeKamarList = ref([])
 
+function normalizeListPayload(payload) {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.items)) return payload.items
+  if (payload && typeof payload === 'object') {
+    const nested = payload.data ?? payload.items ?? payload.result ?? payload.results ?? []
+    if (Array.isArray(nested)) return nested
+  }
+  return []
+}
+
 // ============================================
 // FETCH DATA
 // ============================================
@@ -23,8 +34,9 @@ async function fetchData() {
       api.get('/admin/kamar'),
       api.get('/admin/tipe-kamar'),
     ])
-    kamarList.value = kamarRes.data
-    tipeKamarList.value = tipeRes.data
+
+    kamarList.value = normalizeListPayload(kamarRes.data)
+    tipeKamarList.value = normalizeListPayload(tipeRes.data)
   } catch (error) {
     console.error('Gagal memuat data kamar:', error)
     loadDummyData()

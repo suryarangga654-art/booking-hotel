@@ -15,11 +15,31 @@ const searchQuery = ref('')
 // ============================================
 // FETCH DATA
 // ============================================
+function normalizePemesananList(payload) {
+  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
+
+  return list.map((p) => ({
+    ...p,
+    id: p.id ?? p.pemesanan_id,
+    kode_pemesanan: p.kode_pemesanan ?? p.kode ?? 'N/A',
+    nama_tamu: p.nama_tamu ?? p.user?.name ?? p.guest_name ?? 'Tamu',
+    email: p.email ?? p.user?.email ?? '-',
+    tipe_kamar: p.tipe_kamar ?? p.kamar?.nama ?? p.room_name ?? p.tipe_kamar_name ?? '-',
+    nomor_kamar: p.nomor_kamar ?? p.kamar?.nomor_kamar ?? '-',
+    tanggal_check_in: p.tanggal_check_in ?? p.check_in ?? p.checkIn ?? '',
+    tanggal_check_out: p.tanggal_check_out ?? p.check_out ?? p.checkOut ?? '',
+    jumlah_total: Number(p.jumlah_total ?? p.total ?? p.amount ?? 0),
+    status_pemesanan: p.status_pemesanan ?? p.status ?? 'menunggu',
+    status_pembayaran: p.status_pembayaran ?? p.payment_status ?? 'belum_dibayar',
+    layanan: Array.isArray(p.layanan) ? p.layanan : (p.layanan ? [p.layanan] : []),
+  }))
+}
+
 async function fetchData() {
   loading.value = true
   try {
     const res = await api.get('/admin/pemesanan')
-    pemesananList.value = res.data
+    pemesananList.value = normalizePemesananList(res.data)
   } catch (error) {
     console.error('Gagal memuat data pemesanan:', error)
     loadDummyData()

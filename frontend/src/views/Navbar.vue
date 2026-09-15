@@ -1,16 +1,11 @@
 <script setup>
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { store, logout } from '../store/store'
 import { ref, computed } from 'vue'
 
 const router = useRouter()
-const route = useRoute()
-
 const showDropdown = ref(false)
 const searchQuery = ref('')
-
-// Cek apakah halaman saat ini adalah area Admin (/admin, /admin/kamar, dll)
-const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 
 // Contoh data notifikasi (nanti ambil dari store)
 const unreadCount = computed(() => store.unreadNotifications || 0)
@@ -26,7 +21,7 @@ function toggleDropdown() {
 
 function searchHotel() {
   if (searchQuery.value.trim()) {
-    router.push(`/hotels?search=${searchQuery.value}`)
+    router.push(`/rooms?search=${searchQuery.value}`)
   }
 }
 
@@ -37,8 +32,7 @@ function closeDropdown() {
 </script>
 
 <template>
-  <!-- NAVBAR HANYA TAMPIL JIKA BUKAN HALAMAN ADMIN -->
-  <nav v-if="!isAdminRoute" class="nav">
+  <nav class="nav">
 
     <!-- LOGO -->
     <router-link to="/" class="brand">
@@ -67,7 +61,7 @@ function closeDropdown() {
         Beranda
       </router-link>
 
-      <router-link to="/#rooms" class="nav-link">
+      <router-link to="/rooms" class="nav-link">
         Kamar
       </router-link>
 
@@ -115,11 +109,8 @@ function closeDropdown() {
             <router-link to="/my-bookings" class="dropdown-item">
               <span>📋</span> Pemesanan Saya
             </router-link>
-            <router-link to="/favorites" class="dropdown-item">
-              <span>❤️</span> Favorit
-            </router-link>
-            <router-link to="/settings" class="dropdown-item">
-              <span>⚙️</span> Pengaturan
+            <router-link to="/ulasan/tulis" class="dropdown-item">
+              <span>⭐</span> Tulis Ulasan
             </router-link>
             <hr />
             <button @click="doLogout" class="dropdown-item logout-btn">
@@ -136,25 +127,33 @@ function closeDropdown() {
 </template>
 
 <style scoped>
+
 .nav {
   width: 100%;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
   padding: 14px 6vw;
+
   background: #ffffff;
+
   border-bottom: 1px solid #e2e8f0;
+
   position: relative;
   z-index: 20;
   gap: 20px;
 }
 
 /* =========================
-   BRAND / LOGO
+   BRAND / LOGO (Style Velora)
    ========================= */
+
 .brand {
   display: flex;
   align-items: center;
+
   text-decoration: none;
 }
 
@@ -201,6 +200,7 @@ function closeDropdown() {
 /* =========================
    SEARCH
    ========================= */
+
 .search-container {
   flex: 1;
   max-width: 400px;
@@ -244,6 +244,7 @@ function closeDropdown() {
 /* =========================
    NAVIGATION LINKS
    ========================= */
+
 .links {
   display: flex;
   align-items: center;
@@ -270,6 +271,7 @@ function closeDropdown() {
 /* =========================
    BUTTONS
    ========================= */
+
 .pill {
   padding: 9px 18px !important;
   border-radius: 999px !important;
@@ -300,6 +302,7 @@ function closeDropdown() {
 /* =========================
    NOTIFICATION
    ========================= */
+
 .notification-icon {
   position: relative;
   text-decoration: none;
@@ -330,6 +333,7 @@ function closeDropdown() {
 /* =========================
    USER DROPDOWN
    ========================= */
+
 .user-menu {
   position: relative;
 }
@@ -377,6 +381,7 @@ function closeDropdown() {
 /* =========================
    DROPDOWN
    ========================= */
+
 .dropdown {
   position: absolute;
   top: calc(100% + 8px);
@@ -443,6 +448,7 @@ function closeDropdown() {
 /* =========================
    MOBILE
    ========================= */
+
 @media (max-width: 1024px) {
   .search-container {
     max-width: 250px;
@@ -494,4 +500,5 @@ function closeDropdown() {
     right: -20px;
   }
 }
+
 </style>

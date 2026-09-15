@@ -32,11 +32,27 @@ function logout() {
   router.push('/login')
 }
 
+function normalizePembayaranList(payload) {
+  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
+
+  return list.map((p) => ({
+    ...p,
+    id: p.id ?? p.pembayaran_id,
+    kode_pemesanan: p.kode_pemesanan ?? p.kode ?? p.booking?.kode_pemesanan ?? 'N/A',
+    nama_tamu: p.nama_tamu ?? p.user?.name ?? p.booking?.user?.name ?? 'Tamu',
+    metode: p.metode ?? p.payment_method ?? 'Transfer',
+    jumlah: Number(p.jumlah ?? p.amount ?? p.total ?? 0),
+    tanggal: p.tanggal ?? p.created_at ?? new Date().toISOString(),
+    status: p.status ?? p.payment_status ?? 'menunggu_verifikasi',
+    bukti_url: p.bukti_url ?? p.bukti ?? p.proof_url ?? '',
+  }))
+}
+
 async function fetchData() {
   loading.value = true
   try {
     const res = await api.get('/admin/pembayaran')
-    pembayaranList.value = res.data
+    pembayaranList.value = normalizePembayaranList(res.data)
   } catch (error) {
     loadDummyData()
   } finally {

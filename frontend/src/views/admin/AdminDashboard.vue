@@ -5,8 +5,8 @@ import api from '../../utils/api'
 
 const router = useRouter()
 
-const activeMenu = ref('dashboard')
 const loading = ref(true)
+const errorMsg = ref('')
 
 // ============================================
 // DATA STATE (sesuai skema database)
@@ -24,10 +24,49 @@ const kamarList = ref([])
 const tipeKamarList = ref([])
 
 // ============================================
-// FETCH DATA DARI API
+// NORMALISASI RESPONSE (biar fleksibel walau nama field BE
+// sedikit beda: camelCase vs snake_case, atau dibungkus { data: [...] })
+// ============================================
+function normalizeStatPayload(payload) {
+  const source = payload?.data ?? payload ?? {}
+  return {
+    totalPemesananHariIni: Number(source.totalPemesananHariIni ?? source.total_pemesanan_hari_ini ?? 0),
+    pendapatanBulanIni: Number(source.pendapatanBulanIni ?? source.pendapatan_bulan_ini ?? 0),
+    kamarTersedia: Number(source.kamarTersedia ?? source.kamar_tersedia ?? 0),
+    totalKamar: Number(source.totalKamar ?? source.total_kamar ?? 0),
+    tamuAktif: Number(source.tamuAktif ?? source.tamu_aktif ?? 0),
+  }
+}
+
+function normalizePemesananPayload(payload) {
+  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
+  return list.map((item) => ({
+    ...item,
+    id: item.id ?? item.pemesanan_id,
+    kode_pemesanan: item.kode_pemesanan ?? item.kode ?? 'N/A',
+    nama_tamu: item.nama_tamu ?? item.user?.name ?? item.guest_name ?? 'Tamu',
+    tipe_kamar: item.tipe_kamar ?? item.kamar?.nama ?? item.room_name ?? item.tipe_kamar_name ?? '-',
+    tanggal_check_in: item.tanggal_check_in ?? item.check_in ?? item.checkIn ?? '',
+    tanggal_check_out: item.tanggal_check_out ?? item.check_out ?? item.checkOut ?? '',
+    jumlah_total: Number(item.jumlah_total ?? item.total ?? item.amount ?? 0),
+    status_pemesanan: item.status_pemesanan ?? item.status ?? 'menunggu',
+    status_pembayaran: item.status_pembayaran ?? item.payment_status ?? 'belum_dibayar',
+  }))
+}
+
+function normalizeListPayload(payload) {
+  return Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
+}
+
+// ============================================
+// FETCH DATA DARI API — TANPA FALLBACK DUMMY
+// Kalau backend belum siap / route salah / CORS gagal,
+// ini akan menampilkan pesan error yang jelas, bukan data palsu.
 // ============================================
 async function fetchDashboardData() {
   loading.value = true
+  errorMsg.value = ''
+
   try {
     const [statsRes, pemesananRes, kamarRes, tipeKamarRes] = await Promise.all([
       api.get('/admin/stats'),
@@ -36,54 +75,28 @@ async function fetchDashboardData() {
       api.get('/admin/tipe-kamar'),
     ])
 
-    stats.value = statsRes.data
-    pemesananList.value = pemesananRes.data
-    kamarList.value = kamarRes.data
-    tipeKamarList.value = tipeKamarRes.data
+    stats.value = normalizeStatPayload(statsRes.data)
+    pemesananList.value = normalizePemesananPayload(pemesananRes.data)
+    kamarList.value = normalizeListPayload(kamarRes.data)
+    tipeKamarList.value = normalizeListPayload(tipeKamarRes.data)
   } catch (error) {
     console.error('Gagal memuat data dashboard:', error)
-    // Fallback data contoh, hapus ini setelah API tersambung
-    loadDummyData()
+
+    if (error.response) {
+      // Server merespon, tapi dengan error (404, 500, dll)
+      errorMsg.value = `Gagal memuat data (status ${error.response.status}). ` +
+        `Cek apakah route dan controller di backend sudah sesuai. ` +
+        `Endpoint: ${error.config?.url}`
+    } else if (error.request) {
+      // Request terkirim tapi tidak ada balasan sama sekali
+      // (server mati, salah IP/port, CORS, dll)
+      errorMsg.value = 'Tidak bisa terhubung ke server. Pastikan backend (php artisan serve) sedang menyala dan URL di utils/api.js sudah benar.'
+    } else {
+      errorMsg.value = 'Terjadi kesalahan saat memuat data dashboard.'
+    }
   } finally {
     loading.value = false
   }
-}
-
-function loadDummyData() {
-  stats.value = {
-    totalPemesananHariIni: 12,
-    pendapatanBulanIni: 84500000,
-    kamarTersedia: 18,
-    totalKamar: 32,
-    tamuAktif: 24,
-  }
-
-  pemesananList.value = [
-    { id: 1, kode_pemesanan: 'VLR-20260901-001', nama_tamu: 'Rizky Ananda', tipe_kamar: 'Suite Pesisir', tanggal_check_in: '2026-09-05', tanggal_check_out: '2026-09-07', jumlah_total: 2500000, status_pemesanan: 'dikonfirmasi', status_pembayaran: 'lunas' },
-    { id: 2, kode_pemesanan: 'VLR-20260901-002', nama_tamu: 'Siti Nurhaliza', tipe_kamar: 'Kamar Rimba', tanggal_check_in: '2026-09-06', tanggal_check_out: '2026-09-08', jumlah_total: 1300000, status_pemesanan: 'menunggu', status_pembayaran: 'belum_dibayar' },
-    { id: 3, kode_pemesanan: 'VLR-20260901-003', nama_tamu: 'Bagas Wibowo', tipe_kamar: 'Villa Batu', tanggal_check_in: '2026-09-04', tanggal_check_out: '2026-09-10', jumlah_total: 12600000, status_pemesanan: 'check_in', status_pembayaran: 'lunas' },
-    { id: 4, kode_pemesanan: 'VLR-20260902-001', nama_tamu: 'Amanda Putri', tipe_kamar: 'Kamar Sawah', tanggal_check_in: '2026-09-09', tanggal_check_out: '2026-09-11', jumlah_total: 960000, status_pemesanan: 'dikonfirmasi', status_pembayaran: 'dibayar_sebagian' },
-    { id: 5, kode_pemesanan: 'VLR-20260902-002', nama_tamu: 'Fajar Nugroho', tipe_kamar: 'Suite Pesisir', tanggal_check_in: '2026-08-30', tanggal_check_out: '2026-09-02', jumlah_total: 3750000, status_pemesanan: 'check_out', status_pembayaran: 'lunas' },
-    { id: 6, kode_pemesanan: 'VLR-20260903-001', nama_tamu: 'Dewi Lestari', tipe_kamar: 'Kamar Rimba', tanggal_check_in: '2026-09-12', tanggal_check_out: '2026-09-13', jumlah_total: 650000, status_pemesanan: 'dibatalkan', status_pembayaran: 'dikembalikan' },
-  ]
-
-  tipeKamarList.value = [
-    { id: 1, nama: 'Kamar Rimba', harga_dasar: 650000, kapasitas: 2 },
-    { id: 2, nama: 'Suite Pesisir', harga_dasar: 1250000, kapasitas: 3 },
-    { id: 3, nama: 'Kamar Sawah', harga_dasar: 480000, kapasitas: 2 },
-    { id: 4, nama: 'Villa Batu', harga_dasar: 2100000, kapasitas: 4 },
-  ]
-
-  kamarList.value = [
-    { id: 1, nomor_kamar: '101', lantai: 1, tipe_kamar_id: 1, status: 'tersedia' },
-    { id: 2, nomor_kamar: '102', lantai: 1, tipe_kamar_id: 1, status: 'terisi' },
-    { id: 3, nomor_kamar: '201', lantai: 2, tipe_kamar_id: 2, status: 'tersedia' },
-    { id: 4, nomor_kamar: '202', lantai: 2, tipe_kamar_id: 2, status: 'dibersihkan' },
-    { id: 5, nomor_kamar: '301', lantai: 3, tipe_kamar_id: 3, status: 'terisi' },
-    { id: 6, nomor_kamar: '302', lantai: 3, tipe_kamar_id: 3, status: 'perbaikan' },
-    { id: 7, nomor_kamar: '401', lantai: 4, tipe_kamar_id: 4, status: 'tersedia' },
-    { id: 8, nomor_kamar: '402', lantai: 4, tipe_kamar_id: 4, status: 'tersedia' },
-  ]
 }
 
 onMounted(() => {
@@ -94,10 +107,11 @@ onMounted(() => {
 // HELPER
 // ============================================
 function formatRupiah(n) {
-  return 'Rp' + n.toLocaleString('id-ID')
+  return 'Rp' + Number(n).toLocaleString('id-ID')
 }
 
 function formatTanggal(dateStr) {
+  if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'short',
@@ -129,7 +143,7 @@ const kamarStatusLabel = {
 
 function tipeKamarNama(id) {
   const t = tipeKamarList.value.find((t) => t.id === id)
-  return t ? t.nama : '-'
+  return t ? (t.nama ?? t.name) : '-'
 }
 
 const okupansiPercent = computed(() => {
@@ -201,6 +215,16 @@ const menuItems = [
         Memuat data dashboard...
       </div>
 
+      <!-- ERROR STATE: muncul kalau gagal konek ke backend -->
+      <div v-else-if="errorMsg" class="error-banner">
+        <div class="error-icon">⚠️</div>
+        <div>
+          <strong>Gagal memuat data dari server</strong>
+          <p>{{ errorMsg }}</p>
+        </div>
+        <button class="retry-btn" @click="fetchDashboardData">Coba Lagi</button>
+      </div>
+
       <template v-else>
 
         <!-- STAT CARDS -->
@@ -257,14 +281,17 @@ const menuItems = [
                   <td>{{ formatRupiah(p.jumlah_total) }}</td>
                   <td>
                     <span class="badge" :class="'status-' + p.status_pemesanan">
-                      {{ statusPemesananLabel[p.status_pemesanan] }}
+                      {{ statusPemesananLabel[p.status_pemesanan] || p.status_pemesanan }}
                     </span>
                   </td>
                   <td>
                     <span class="badge" :class="'pay-' + p.status_pembayaran">
-                      {{ statusPembayaranLabel[p.status_pembayaran] }}
+                      {{ statusPembayaranLabel[p.status_pembayaran] || p.status_pembayaran }}
                     </span>
                   </td>
+                </tr>
+                <tr v-if="pemesananList.length === 0">
+                  <td colspan="8" class="empty-row">Belum ada data pemesanan.</td>
                 </tr>
               </tbody>
             </table>
@@ -287,7 +314,11 @@ const menuItems = [
             >
               <span class="room-number">{{ k.nomor_kamar }}</span>
               <span class="room-type">{{ tipeKamarNama(k.tipe_kamar_id) }}</span>
-              <span class="room-status">{{ kamarStatusLabel[k.status] }}</span>
+              <span class="room-status">{{ kamarStatusLabel[k.status] || k.status }}</span>
+            </div>
+
+            <div v-if="kamarList.length === 0" class="empty-row full-width">
+              Belum ada data kamar.
             </div>
           </div>
         </section>
@@ -372,6 +403,7 @@ const menuItems = [
   border-radius: 8px;
 
   color: #cbd5e1;
+  text-decoration: none;
 
   font-family: inherit;
   font-size: 14px;
@@ -483,6 +515,58 @@ const menuItems = [
   text-align: center;
   color: #64748b;
   font-size: 14px;
+}
+
+/* =========================================
+   ERROR BANNER
+   ========================================= */
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+
+.error-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.error-banner strong {
+  display: block;
+  color: #991b1b;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.error-banner p {
+  margin: 0;
+  color: #7f1d1d;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.retry-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: #991b1b;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.retry-btn:hover {
+  background: #7f1d1d;
 }
 
 /* =========================================
@@ -615,6 +699,16 @@ tbody tr:hover {
   color: #0284c7;
 }
 
+.empty-row {
+  text-align: center;
+  color: #94a3b8;
+  padding: 30px 0;
+}
+
+.empty-row.full-width {
+  grid-column: 1 / -1;
+}
+
 /* BADGES */
 .badge {
   display: inline-block;
@@ -740,6 +834,15 @@ tbody tr:hover {
   .topbar {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .error-banner {
+    flex-direction: column;
+  }
+
+  .retry-btn {
+    margin-left: 0;
+    width: 100%;
   }
 }
 </style>

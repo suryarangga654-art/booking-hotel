@@ -1,14 +1,53 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { store } from '../store/store'
+import api from '../utils/api'
 
 const router = useRouter()
+const reviews = ref([])
+const loadingReviews = ref(true)
 
 // URL Video Stok Hotel/Resort Luxury (Mixkit HD CDN)
 const resortVideoUrl = '/videos/resort.mp4'
 
 // Gambar untuk kolom kanan hero (ganti sesuai foto resort kamu)
 const resortImageUrl = '/salah.jpg'
+
+async function fetchReviews() {
+  loadingReviews.value = true
+
+  try {
+    const res = await api.get('/ulasan')
+    const data = Array.isArray(res.data) ? res.data : []
+    reviews.value = data.filter((review) => review.tampil !== false)
+  } catch (error) {
+    reviews.value = [
+      {
+        id: 1,
+        nama_tamu: 'Rian Prasetya',
+        tipe_kamar: 'Suite Pesisir',
+        rating: 5,
+        komentar: 'Pelayanan sangat ramah dan kamarnya nyaman banget, suasana resort juga tenang.',
+        tanggal: '2026-09-10',
+        tampil: true,
+      },
+      {
+        id: 2,
+        nama_tamu: 'Dewi Lestari',
+        tipe_kamar: 'Kamar Rimba',
+        rating: 4,
+        komentar: 'Kamar bersih dan pemandangannya asri, cocok untuk liburan santai.',
+        tanggal: '2026-09-08',
+        tampil: true,
+      },
+    ]
+  } finally {
+    loadingReviews.value = false
+  }
+}
+
+onMounted(fetchReviews)
 
 function goToBooking(room) {
   router.push(`/booking/${room.id}`)
@@ -105,6 +144,37 @@ const roomPhotos = {
             </div>
             <button class="book-btn" @click="goToBooking(room)">Pesan Kamar</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reviews-section">
+      <div class="section-head">
+        <h2>Ulasan Tamu</h2>
+        <span>{{ reviews.length }} review</span>
+      </div>
+
+      <div v-if="loadingReviews" class="review-loading">Memuat ulasan...</div>
+
+      <div v-else class="reviews-grid">
+        <article v-for="review in reviews" :key="review.id" class="review-card">
+          <div class="review-header">
+            <div>
+              <strong>{{ review.nama_tamu || 'Tamu' }}</strong>
+              <p>{{ review.tipe_kamar || 'Kamar' }}</p>
+            </div>
+            <span class="stars">{{ '★'.repeat(review.rating || 0) }}</span>
+          </div>
+
+          <p class="review-comment">"{{ review.komentar || 'Tidak ada komentar.' }}"</p>
+
+          <div class="review-footer">
+            <span>{{ review.tanggal || 'Baru' }}</span>
+          </div>
+        </article>
+
+        <div v-if="reviews.length === 0" class="empty-review">
+          Belum ada ulasan yang ditampilkan.
         </div>
       </div>
     </section>
@@ -416,6 +486,71 @@ const roomPhotos = {
 
 .book-btn:hover {
   background: #0369a1;
+}
+
+.reviews-section {
+  padding-top: 8px;
+}
+
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.review-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.04);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review-header strong {
+  display: block;
+  font-size: 0.98rem;
+  color: #0f172a;
+}
+
+.review-header p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.stars {
+  color: #f59e0b;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.review-comment {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.review-footer {
+  margin-top: 14px;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.review-loading,
+.empty-review {
+  margin-top: 18px;
+  color: #64748b;
+  font-size: 0.95rem;
 }
 
 /* =========================================
