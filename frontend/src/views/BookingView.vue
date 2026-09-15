@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { store, addBooking } from '../store/store'
+import { store, roomStatusInfo, addBooking } from '../store/store'
+import api from '../utils/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -9,8 +10,19 @@ const router = useRouter()
 const guestName = ref(store.user ? store.user.name : '')
 const checkIn = ref('')
 const checkOut = ref('')
+const paymentMethod = ref('transfer_bank')
+const paymentProof = ref(null)
+const paymentPreview = ref('')
 const toast = ref('')
 const submitted = ref(false)
+
+const roomRules = [
+  'Dilarang merokok di dalam kamar maupun area balkon kamar.',
+  'Maksimal pengunjung sesuai kapasitas kamar yang tertera.',
+  'Tidak diperkenankan membawa hewan peliharaan tanpa persetujuan sebelumnya.',
+  'Harap menjaga kebersihan kamar dan tidak merusak fasilitas.',
+  'Check-in mulai pukul 14.00 dan check-out paling lambat pukul 12.00.',
+]
 
 // Ambil tanggal hari ini (format YYYY-MM-DD lokal) untuk mengunci tanggal lalu
 const today = computed(() => {
@@ -45,7 +57,7 @@ if (!store.user) {
 }
 
 function formatPrice(n) {
-  return n.toLocaleString('id-ID')
+  return Number(n).toLocaleString('id-ID')
 }
 
 const jumlahMalam = computed(() => {
@@ -61,22 +73,91 @@ const totalHarga = computed(() => {
   return room.value.price * jumlahMalam.value
 })
 
-function confirmBooking() {
-  if (!checkIn.value || !checkOut.value || !guestName.value) return
+function handlePaymentProofUpload(event) {
+  const file = event.target.files && event.target.files[0]
+  if (!file) {
+    paymentProof.value = null
+    paymentPreview.value = ''
+    return
+  }
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    toast.value = 'Format bukti transfer harus JPG, PNG, atau WebP.'
+    setTimeout(() => (toast.value = ''), 3000)
+    paymentProof.value = null
+    paymentPreview.value = ''
+    event.target.value = ''
+    return
+  }
+
+  paymentProof.value = file
+  paymentPreview.value = URL.createObjectURL(file)
+}
+
+async function confirmBooking() {
+  if (!checkIn.value || !checkOut.value || !guestName.value) {
+    toast.value = 'Silakan lengkapi data pemesanan.'
+    setTimeout(() => (toast.value = ''), 3000)
+    return
+  }
+
   if (jumlahMalam.value <= 0) {
     toast.value = 'Tanggal check-out harus setelah check-in.'
     setTimeout(() => (toast.value = ''), 3000)
     return
   }
 
-  addBooking({
-    roomId: room.value.id,
-    guestName: guestName.value,
-    checkIn: checkIn.value,
-    checkOut: checkOut.value,
-  })
+  if (!paymentProof.value) {
+    toast.value = 'Silakan upload bukti transfer terlebih dahulu.'
+    setTimeout(() => (toast.value = ''), 3200)
+    return
+  }
 
-  submitted.value = true
+  try {
+    const payload = {
+      kamar_id: room.value.id,
+      nama_tamu: guestName.value,
+      tanggal_check_in: checkIn.value,
+      tanggal_check_out: checkOut.value,
+      metode_pembayaran: paymentMethod.value,
+      bukti_transfer: paymentProof.value.name,
+      jumlah_transfer: totalHarga.value,
+      status_pembayaran: 'menunggu_verifikasi',
+    }
+
+    await api.post('/pemesanan', payload)
+
+    const result = addBooking({
+      roomId: room.value.id,
+      guestName: guestName.value,
+      checkIn: checkIn.value,
+      checkOut: checkOut.value,
+    })
+
+    if (!result.ok) {
+      toast.value = result.error || 'Terjadi kesalahan saat menyimpan pemesanan lokal.'
+      setTimeout(() => (toast.value = ''), 3500)
+      return
+    }
+
+    submitted.value = true
+  } catch (error) {
+    const fallback = addBooking({
+      roomId: room.value.id,
+      guestName: guestName.value,
+      checkIn: checkIn.value,
+      checkOut: checkOut.value,
+    })
+
+    if (!fallback.ok) {
+      toast.value = fallback.error || 'Terjadi kesalahan saat memproses pemesanan.'
+      setTimeout(() => (toast.value = ''), 3500)
+      return
+    }
+
+    submitted.value = true
+  }
 }
 
 function backToHome() {
@@ -101,8 +182,8 @@ function backToHome() {
         <div class="success-icon">✓</div>
         <h2>Pemesanan Terkirim</h2>
         <p>
-          Terima kasih, {{ guestName }}. Pemesanan {{ room.name }} kamu sedang
-          menunggu konfirmasi dari tim kami.
+          Terima kasih, {{ guestName }}. Bukti transfer kamu sudah diterima dan
+          pemesanan {{ room.name }} sedang menunggu verifikasi dari tim kami.
         </p>
         <button class="btn-primary" @click="backToHome">Kembali ke Beranda</button>
       </div>
@@ -113,16 +194,35 @@ function backToHome() {
         <!-- INFO KAMAR -->
         <div class="room-info">
           <img :src="roomPhotos[room.id]" :alt="room.name" class="room-photo" />
+          <span class="status-badge" :class="'status-' + room.status">
+            {{ roomStatusInfo[room.status]?.label }}
+          </span>
           <h1>{{ room.name }}</h1>
           <p class="room-desc">{{ room.desc }}</p>
           <p class="room-meta">Maks {{ room.capacity }} tamu</p>
           <div class="room-price">
             Rp{{ formatPrice(room.price) }}<small> / malam</small>
           </div>
+
+          <div class="rules-box">
+            <h3>Peraturan Kamar</h3>
+            <ul>
+              <li v-for="rule in roomRules" :key="rule">{{ rule }}</li>
+            </ul>
+          </div>
         </div>
 
-        <!-- FORM PEMESANAN -->
-        <div class="booking-form">
+        <!-- FORM PEMESANAN (disembunyikan kalau kamar tidak tersedia) -->
+        <div v-if="roomStatusInfo[room.status]?.bookable === false" class="booking-form unavailable-notice">
+          <h2>Kamar Tidak Tersedia</h2>
+          <p class="unavailable-text">
+            Maaf, {{ room.name }} sedang <strong>{{ roomStatusInfo[room.status]?.label.toLowerCase() }}</strong>
+            dan belum bisa dipesan saat ini. Silakan pilih kamar lain.
+          </p>
+          <button class="btn-primary" @click="backToHome">Lihat Kamar Lain</button>
+        </div>
+
+        <div v-else class="booking-form">
           <h2>Detail Pemesanan</h2>
 
           <div class="fieldset">
@@ -149,6 +249,35 @@ function backToHome() {
             </div>
           </div>
 
+          <div class="payment-box">
+            <h3>Metode Pembayaran</h3>
+            <div class="payment-row">
+              <label class="radio-option">
+                <input v-model="paymentMethod" type="radio" value="transfer_bank" />
+                <span>Transfer Bank</span>
+              </label>
+              <label class="radio-option">
+                <input v-model="paymentMethod" type="radio" value="qris" />
+                <span>QRIS</span>
+              </label>
+            </div>
+
+            <div class="transfer-info">
+              <p>Nomor rekening tujuan: <strong>0858 0000 1234</strong> a.n. Velora Resort</p>
+              <p>Jumlah transfer: <strong>Rp{{ formatPrice(totalHarga) }}</strong></p>
+            </div>
+
+            <div class="upload-box">
+              <label for="payment-proof">Upload bukti transfer</label>
+              <input id="payment-proof" type="file" accept="image/*" @change="handlePaymentProofUpload" />
+              <small>Format: JPG, PNG, atau WebP. Foto harus jelas terbaca nominal transfer.</small>
+            </div>
+
+            <div v-if="paymentPreview" class="proof-preview">
+              <img :src="paymentPreview" alt="Bukti transfer" />
+            </div>
+          </div>
+
           <div v-if="jumlahMalam > 0" class="price-summary">
             <div class="price-row">
               <span>Rp{{ formatPrice(room.price) }} x {{ jumlahMalam }} malam</span>
@@ -161,7 +290,7 @@ function backToHome() {
           </div>
 
           <button class="btn-primary w-full" @click="confirmBooking">
-            Konfirmasi Pemesanan
+            Konfirmasi Pemesanan & Kirim Bukti
           </button>
         </div>
 
@@ -218,9 +347,6 @@ function backToHome() {
   text-decoration: underline;
 }
 
-/* =========================================
-   GRID: INFO + FORM
-   ========================================= */
 .booking-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -234,6 +360,44 @@ function backToHome() {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  position: relative;
+}
+
+.status-badge {
+  position: absolute;
+  top: 240px;
+  right: 16px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.status-tersedia { background: #dcfce7; color: #166534; }
+.status-terisi { background: #dbeafe; color: #1e40af; }
+.status-perbaikan { background: #fee2e2; color: #991b1b; }
+.status-dibersihkan { background: #fef3c7; color: #92400e; }
+
+.unavailable-notice {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.unavailable-notice h2 {
+  color: #dc2626;
+}
+
+.unavailable-text {
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 8px;
 }
 
 .room-photo {
@@ -278,9 +442,30 @@ function backToHome() {
   font-weight: 400;
 }
 
-/* =========================================
-   FORM
-   ========================================= */
+.rules-box {
+  margin: 0 20px 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.rules-box h3 {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.rules-box ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: #475569;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 .booking-form {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -327,6 +512,80 @@ function backToHome() {
   box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
 }
 
+.payment-box {
+  margin: 20px 0;
+  padding: 18px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.payment-box h3 {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.payment-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.transfer-info {
+  margin: 12px 0 16px;
+  font-size: 0.82rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.upload-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-box label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.upload-box input {
+  padding: 10px 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.upload-box small {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.proof-preview {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.proof-preview img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+
 .price-summary {
   margin: 20px 0;
   padding: 14px 16px;
@@ -370,9 +629,6 @@ function backToHome() {
   width: 100%;
 }
 
-/* =========================================
-   SUCCESS STATE
-   ========================================= */
 .success-card {
   max-width: 480px;
   margin: 40px auto 0;
@@ -410,9 +666,6 @@ function backToHome() {
   line-height: 1.6;
 }
 
-/* =========================================
-   TOAST
-   ========================================= */
 .toast {
   position: fixed;
   bottom: 24px;
@@ -426,9 +679,6 @@ function backToHome() {
   font-weight: 500;
 }
 
-/* =========================================
-   FOOTER
-   ========================================= */
 footer {
   border-top: 1px solid #e2e8f0;
   padding: 24px 20px;
@@ -437,9 +687,6 @@ footer {
   font-size: 0.875rem;
 }
 
-/* =========================================
-   RESPONSIVE
-   ========================================= */
 @media (max-width: 800px) {
   .booking-grid {
     grid-template-columns: 1fr;

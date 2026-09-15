@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
-import Register from '../views/Register.vue'
 import RoomsView from '../views/RoomsView.vue'
 import BookingView from '../views/BookingView.vue'
+import TulisUlasan from '../views/TulisUlasan.vue'
+import MyBookings from '../views/MyBookings.vue'
+import ProfileView from '../views/ProfileView.vue'
 import AdminDashboard from '../views/admin/AdminDashboard.vue'
 import AdminKamar from '../views/admin/AdminKamar.vue'
 import AdminPemesanan from '../views/admin/AdminPemesanan.vue'
@@ -15,10 +17,11 @@ import AdminPengguna from '../views/admin/AdminPengguna.vue'
 const routes = [
   { path: '/', name: 'home', component: Home },
   { path: '/login', name: 'login', component: Login },
-  { path: '/register', name: 'register', component: Register },
   { path: '/rooms', name: 'rooms', component: RoomsView },
   { path: '/booking/:id', name: 'booking', component: BookingView },
-
+  { path: '/ulasan/:id', name: 'ulasan', component: TulisUlasan },
+  { path: '/my-bookings', name: 'my-bookings', component: MyBookings },
+  { path: '/profile', name: 'profile', component: ProfileView },
   {
     path: '/admin',
     name: 'admin-dashboard',
