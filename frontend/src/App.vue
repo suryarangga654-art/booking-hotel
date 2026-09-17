@@ -1,10 +1,15 @@
 <script setup>
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Navbar from './views/Navbar.vue'
+
+const route = useRoute()
+const showNavbar = computed(() => !route.meta.hideNavbar)
 </script>
 
 <template>
   <div class="app-shell">
-    <Navbar />
+    <Navbar v-if="showNavbar" />
 
     <main class="page-shell">
       <router-view />

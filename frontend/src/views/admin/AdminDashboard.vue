@@ -68,25 +68,51 @@ async function fetchDashboardData() {
   errorMsg.value = ''
 
   try {
-    const [statsRes, pemesananRes, kamarRes, tipeKamarRes] = await Promise.all([
+    const results = await Promise.allSettled([
       api.get('/admin/stats'),
       api.get('/admin/pemesanan?limit=8'),
       api.get('/admin/kamar'),
       api.get('/admin/tipe-kamar'),
     ])
 
-    stats.value = normalizeStatPayload(statsRes.data)
-    pemesananList.value = normalizePemesananPayload(pemesananRes.data)
-    kamarList.value = normalizeListPayload(kamarRes.data)
-    tipeKamarList.value = normalizeListPayload(tipeKamarRes.data)
-  } catch (error) {
-    console.error('Gagal memuat data dashboard:', error)
+    const [statsResult, pemesananResult, kamarResult, tipeKamarResult] = results
 
+    if (statsResult.status === 'fulfilled') {
+      stats.value = normalizeStatPayload(statsResult.value.data)
+    }
+    if (pemesananResult.status === 'fulfilled') {
+      pemesananList.value = normalizePemesananPayload(pemesananResult.value.data)
+    }
+    if (kamarResult.status === 'fulfilled') {
+      kamarList.value = normalizeListPayload(kamarResult.value.data)
+    }
+    if (tipeKamarResult.status === 'fulfilled') {
+      tipeKamarList.value = normalizeListPayload(tipeKamarResult.value.data)
+    }
+
+    const failedResults = results
+      .map((result, index) => ({ result, index }))
+      .filter(({ result }) => result.status === 'rejected')
+
+    if (failedResults.length) {
+      const endpointNames = [
+        '/admin/stats',
+        '/admin/pemesanan?limit=8',
+        '/admin/kamar',
+        '/admin/tipe-kamar',
+      ]
+      const failedEndpoints = failedResults
+        .map(({ index }) => endpointNames[index])
+        .join(', ')
+      errorMsg.value = `Sebagian data gagal dimuat: ${failedEndpoints}. ` +
+        'Periksa method GET pada route backend.'
+    }
+  } catch (error) {
     if (error.response) {
       // Server merespon, tapi dengan error (404, 500, dll)
-      errorMsg.value = `Gagal memuat data (status ${error.response.status}). ` +
-        `Cek apakah route dan controller di backend sudah sesuai. ` +
-        `Endpoint: ${error.config?.url}`
+      errorMsg.value = `Gagal memuat ${error.config?.method?.toUpperCase() || 'request'} ` +
+        `${error.config?.url || 'endpoint admin'} (status ${error.response.status}). ` +
+        'Periksa method route backend.'
     } else if (error.request) {
       // Request terkirim tapi tidak ada balasan sama sekali
       // (server mati, salah IP/port, CORS, dll)
@@ -129,6 +155,7 @@ const statusPemesananLabel = {
 
 const statusPembayaranLabel = {
   belum_dibayar: 'Belum Dibayar',
+  menunggu_verifikasi: 'Menunggu Verifikasi',
   dibayar_sebagian: 'Dibayar Sebagian',
   lunas: 'Lunas',
   dikembalikan: 'Dikembalikan',
@@ -154,6 +181,8 @@ const okupansiPercent = computed(() => {
 
 function logout() {
   localStorage.removeItem('token')
+  localStorage.removeItem('velora_token')
+  localStorage.removeItem('velora_user')
   router.push('/login')
 }
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { store, roomStatusInfo, addBooking } from '../store/store'
 import api from '../utils/api'
@@ -7,7 +7,7 @@ import api from '../utils/api'
 const route = useRoute()
 const router = useRouter()
 
-const guestName = ref(store.user ? store.user.name : '')
+const guestName = ref('')
 const checkIn = ref('')
 const checkOut = ref('')
 const paymentMethod = ref('transfer_bank')
@@ -24,7 +24,6 @@ const roomRules = [
   'Check-in mulai pukul 14.00 dan check-out paling lambat pukul 12.00.',
 ]
 
-// Ambil tanggal hari ini (format YYYY-MM-DD lokal) untuk mengunci tanggal lalu
 const today = computed(() => {
   const d = new Date()
   const year = d.getFullYear()
@@ -33,7 +32,6 @@ const today = computed(() => {
   return `${year}-${month}-${day}`
 })
 
-// Mengunci tanggal Check-out agar tidak bisa sebelum Check-in (atau hari ini jika belum pilih Check-in)
 const minCheckOut = computed(() => {
   return checkIn.value ? checkIn.value : today.value
 })
@@ -45,19 +43,25 @@ const roomPhotos = {
   4: '/aurea4.jpg',
 }
 
-// Ambil data kamar berdasarkan id di URL (/booking/:id)
 const room = computed(() => {
   const id = Number(route.params.id)
-  return store.rooms.find((r) => r.id === id)
+  return store.rooms ? store.rooms.find((r) => r.id === id) : null
 })
 
-// Kalau belum login, lempar ke halaman login dulu
-if (!store.user) {
-  router.push('/login')
-}
+onMounted(() => {
+  const token = localStorage.getItem('token') || localStorage.getItem('velora_token')
+  if (!token && !store.user) {
+    router.push('/login')
+    return
+  }
+
+  if (store.user) {
+    guestName.value = store.user.name || store.user.nama || ''
+  }
+})
 
 function formatPrice(n) {
-  return Number(n).toLocaleString('id-ID')
+  return Number(n || 0).toLocaleString('id-ID')
 }
 
 const jumlahMalam = computed(() => {
@@ -75,6 +79,11 @@ const totalHarga = computed(() => {
 
 function handlePaymentProofUpload(event) {
   const file = event.target.files && event.target.files[0]
+  
+  if (paymentPreview.value) {
+    URL.revokeObjectURL(paymentPreview.value)
+  }
+
   if (!file) {
     paymentProof.value = null
     paymentPreview.value = ''
@@ -115,48 +124,51 @@ async function confirmBooking() {
   }
 
   try {
-    const payload = {
-      kamar_id: room.value.id,
-      nama_tamu: guestName.value,
-      tanggal_check_in: checkIn.value,
-      tanggal_check_out: checkOut.value,
-      metode_pembayaran: paymentMethod.value,
-      bukti_transfer: paymentProof.value.name,
-      jumlah_transfer: totalHarga.value,
-      status_pembayaran: 'menunggu_verifikasi',
-    }
+    const payload = new FormData()
+    
+    // Data Utama Pemesanan
+    payload.append('kamar_id', Number(room.value.id))
+    payload.append('nama_tamu', guestName.value)
+    payload.append('tanggal_check_in', checkIn.value)
+    payload.append('tanggal_check_out', checkOut.value)
+    payload.append('metode_pembayaran', paymentMethod.value)
+    payload.append('bukti_transfer', paymentProof.value)
+    payload.append('jumlah_total', Math.round(Number(totalHarga.value)))
 
-    await api.post('/pemesanan', payload)
+    // --- PERBAIKAN: Mengirimkan harga per malam & jumlah harga ---
+    payload.append('harga_per_malam', Math.round(Number(room.value.price)))
+    payload.append('jumlah_harga', Math.round(Number(totalHarga.value)))
 
-    const result = addBooking({
-      roomId: room.value.id,
-      guestName: guestName.value,
-      checkIn: checkIn.value,
-      checkOut: checkOut.value,
-    })
+    const res = await api.post('/tamu/pemesanan', payload)
 
-    if (!result.ok) {
-      toast.value = result.error || 'Terjadi kesalahan saat menyimpan pemesanan lokal.'
-      setTimeout(() => (toast.value = ''), 3500)
-      return
+    const newBookingData = res.data?.data || res.data?.booking || res.data
+
+    if (typeof addBooking === 'function') {
+      addBooking(newBookingData)
     }
 
     submitted.value = true
   } catch (error) {
-    const fallback = addBooking({
-      roomId: room.value.id,
-      guestName: guestName.value,
-      checkIn: checkIn.value,
-      checkOut: checkOut.value,
-    })
+    console.error('Detail Error Pemesanan:', error.response?.data)
 
-    if (!fallback.ok) {
-      toast.value = fallback.error || 'Terjadi kesalahan saat memproses pemesanan.'
-      setTimeout(() => (toast.value = ''), 3500)
-      return
+    if (error.response) {
+      if (error.response.status === 401) {
+        toast.value = 'Sesi telah berakhir atau Anda belum login. Silakan login kembali.'
+        setTimeout(() => router.push('/login'), 2000)
+      } else if (error.response.status === 422) {
+        const errors = error.response.data.errors
+        const message = errors 
+          ? Object.values(errors).flat().join(', ') 
+          : error.response.data.message
+        toast.value = message || 'Data tidak valid.'
+      } else {
+        toast.value = error.response.data?.message || 'Gagal mengirim pemesanan.'
+      }
+    } else {
+      toast.value = 'Tidak dapat terhubung ke server.'
     }
 
-    submitted.value = true
+    setTimeout(() => (toast.value = ''), 5000)
   }
 }
 
@@ -167,14 +179,12 @@ function backToHome() {
 
 <template>
   <div class="page-wrapper">
-
     <div v-if="!room" class="not-found">
       <p>Kamar tidak ditemukan.</p>
       <router-link to="/#rooms" class="link-back">&larr; Kembali ke daftar kamar</router-link>
     </div>
 
     <div v-else class="booking-container">
-
       <router-link to="/#rooms" class="link-back">&larr; Kembali ke daftar kamar</router-link>
 
       <!-- STATE: BERHASIL DIPESAN -->
@@ -190,12 +200,11 @@ function backToHome() {
 
       <!-- STATE: FORM PEMESANAN -->
       <div v-else class="booking-grid">
-
         <!-- INFO KAMAR -->
         <div class="room-info">
-          <img :src="roomPhotos[room.id]" :alt="room.name" class="room-photo" />
+          <img :src="roomPhotos[room.id] || '/aurea.jpg'" :alt="room.name" class="room-photo" />
           <span class="status-badge" :class="'status-' + room.status">
-            {{ roomStatusInfo[room.status]?.label }}
+            {{ roomStatusInfo[room.status]?.label || room.status }}
           </span>
           <h1>{{ room.name }}</h1>
           <p class="room-desc">{{ room.desc }}</p>
@@ -212,7 +221,7 @@ function backToHome() {
           </div>
         </div>
 
-        <!-- FORM PEMESANAN (disembunyikan kalau kamar tidak tersedia) -->
+        <!-- FORM PEMESANAN -->
         <div v-if="roomStatusInfo[room.status]?.bookable === false" class="booking-form unavailable-notice">
           <h2>Kamar Tidak Tersedia</h2>
           <p class="unavailable-text">
@@ -233,19 +242,11 @@ function backToHome() {
           <div class="fieldset-row">
             <div class="fieldset">
               <label>Check-in</label>
-              <input 
-                v-model="checkIn" 
-                type="date" 
-                :min="today" 
-              />
+              <input v-model="checkIn" type="date" :min="today" />
             </div>
             <div class="fieldset">
               <label>Check-out</label>
-              <input 
-                v-model="checkOut" 
-                type="date" 
-                :min="minCheckOut" 
-              />
+              <input v-model="checkOut" type="date" :min="minCheckOut" />
             </div>
           </div>
 
@@ -293,7 +294,6 @@ function backToHome() {
             Konfirmasi Pemesanan & Kirim Bukti
           </button>
         </div>
-
       </div>
     </div>
 

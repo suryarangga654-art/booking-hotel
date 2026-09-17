@@ -1,29 +1,50 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { store } from '../store/store'
 import api from '../utils/api'
 
 const router = useRouter()
+const route = useRoute()
 
 const rating = ref(0)
 const hoverRating = ref(0)
 const komentar = ref('')
-const tipeKamarId = ref('')
+const pemesananId = ref('')
+const bookingsOptions = ref([])
 const loading = ref(false)
 const errorMsg = ref('')
 const submitted = ref(false)
 
-// Kalau belum login, lempar ke halaman login dulu
-if (!store.user) {
+// Cek token auth
+const token = localStorage.getItem('token') || localStorage.getItem('velora_token')
+if (!token && !store.user) {
   router.push('/login')
 }
+
+async function loadBookings() {
+  try {
+    // Ambil daftar pemesanan milik tamu yang bisa diulas
+    const res = await api.get('/tamu/pemesanan')
+    const data = res.data?.data || res.data
+    bookingsOptions.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    console.error('Gagal mengambil daftar pemesanan:', e)
+  }
+
+  // Jika ada param :id (pemesanan_id) di URL (/tulis-ulasan/:id)
+  if (route.params.id) {
+    pemesananId.value = route.params.id
+  }
+}
+
+onMounted(loadBookings)
 
 async function submitUlasan() {
   errorMsg.value = ''
 
-  if (!tipeKamarId.value) {
-    errorMsg.value = 'Pilih tipe kamar yang kamu tempati.'
+  if (!pemesananId.value) {
+    errorMsg.value = 'Pilih riwayat pemesanan yang ingin diulas.'
     return
   }
   if (rating.value === 0) {
@@ -37,9 +58,10 @@ async function submitUlasan() {
 
   loading.value = true
   try {
-    await api.post('/ulasan', {
-      tipe_kamar_id: tipeKamarId.value,
-      rating: rating.value,
+    // Endpoint disesuaikan ke /tamu/ulasan & key payload sesuai field DB (penilaian, pemesanan_id)
+    await api.post('/tamu/ulasan', {
+      pemesanan_id: pemesananId.value,
+      penilaian: rating.value,
       komentar: komentar.value,
     })
     submitted.value = true
@@ -66,7 +88,7 @@ function backToHome() {
       <div v-if="submitted" class="success-card">
         <div class="success-icon">✓</div>
         <h2>Terima Kasih!</h2>
-        <p>Ulasan kamu sudah terkirim dan akan tampil setelah diperiksa oleh tim kami.</p>
+        <p>Ulasan kamu sudah terkirim dan berhasil disimpan.</p>
         <button class="btn-primary" @click="backToHome">Kembali ke Beranda</button>
       </div>
 
@@ -80,11 +102,11 @@ function backToHome() {
         <p v-if="errorMsg" class="error-message">{{ errorMsg }}</p>
 
         <div class="fieldset">
-          <label>Tipe Kamar</label>
-          <select v-model="tipeKamarId">
-            <option value="" disabled>Pilih tipe kamar yang kamu tempati</option>
-            <option v-for="room in store.rooms" :key="room.id" :value="room.id">
-              {{ room.name }}
+          <label>Pilih Pemesanan</label>
+          <select v-model="pemesananId">
+            <option value="" disabled>Pilih riwayat pemesanan kamu</option>
+            <option v-for="booking in bookingsOptions" :key="booking.id" :value="booking.id">
+              Pemesanan #{{ booking.id }} - {{ booking.kamar?.nama || 'Kamar' }}
             </option>
           </select>
         </div>
@@ -266,9 +288,6 @@ function backToHome() {
   width: 100%;
 }
 
-/* =========================================
-   SUCCESS STATE
-   ========================================= */
 .success-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -304,9 +323,6 @@ function backToHome() {
   line-height: 1.6;
 }
 
-/* =========================================
-   FOOTER
-   ========================================= */
 footer {
   border-top: 1px solid #e2e8f0;
   padding: 24px 20px;

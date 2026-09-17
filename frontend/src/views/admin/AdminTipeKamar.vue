@@ -20,9 +20,6 @@ const filterTipe = ref('')
 // ============================================
 // FETCH DATA
 // ============================================
-// ============================================
-// FETCH DATA (Perbaikan Parsing Response)
-// ============================================
 async function fetchData() {
   loading.value = true
   try {
@@ -31,11 +28,9 @@ async function fetchData() {
       api.get('/admin/kamar')
     ])
 
-    // Mengambil data murni jika dibungkus oleh Laravel
     let rawTipe = tipeRes.data?.data || tipeRes.data
     let rawKamar = kamarRes.data?.data || kamarRes.data
 
-    // Jika Laravel mengirimkan Object berformat { '0': {...}, '1': {...} }
     if (rawTipe && typeof rawTipe === 'object' && !Array.isArray(rawTipe)) {
       rawTipe = Object.values(rawTipe)
     }
@@ -43,22 +38,21 @@ async function fetchData() {
       rawKamar = Object.values(rawKamar)
     }
 
-    // Memastikan nilai akhir SELALU Array
     tipeKamarList.value = Array.isArray(rawTipe) ? rawTipe : []
     kamarList.value = Array.isArray(rawKamar) ? rawKamar : []
   } catch (error) {
     console.error('Gagal memuat data kamar:', error)
-    loadDummyData()
   } finally {
     loading.value = false
   }
 }
 
+onMounted(fetchData)
+
 // ============================================
-// HELPER (Perbaikan Proteksi Array)
+// HELPER
 // ============================================
 function tipeKamarNama(tipeId) {
-  // Cek jika tipeKamarList bukan Array atau kosong
   if (!Array.isArray(tipeKamarList.value) || tipeKamarList.value.length === 0) {
     return 'Tidak Diketahui'
   }
@@ -75,8 +69,8 @@ function showToast(msg) {
 const filteredKamar = computed(() => {
   if (!Array.isArray(kamarList.value)) return []
   return kamarList.value.filter((k) => {
-    const matchQuery = !searchQuery.value.trim() || k.nomor_kamar.toLowerCase().includes(searchQuery.value.toLowerCase())
-    const matchTipe = !filterTipe.value || k.tipe_kamar_id === Number(filterTipe.value)
+    const matchQuery = !searchQuery.value.trim() || String(k.nomor_kamar).toLowerCase().includes(searchQuery.value.toLowerCase().trim())
+    const matchTipe = !filterTipe.value || Number(k.tipe_kamar_id) === Number(filterTipe.value)
     return matchQuery && matchTipe
   })
 })
@@ -94,38 +88,57 @@ const form = ref({
 
 function openAdd() {
   editingId.value = null
-  form.value = { nomor_kamar: '', tipe_kamar_id: tipeKamarList.value[0]?.id || '', status: 'Tersedia' }
+  const defaultTipeId = tipeKamarList.value.length > 0 ? tipeKamarList.value[0].id : ''
+  form.value = { 
+    nomor_kamar: '', 
+    tipe_kamar_id: defaultTipeId, 
+    status: 'Tersedia' 
+  }
   showModal.value = true
 }
 
 function openEdit(item) {
   editingId.value = item.id
-  form.value = { ...item }
+  form.value = { 
+    ...item,
+    tipe_kamar_id: Number(item.tipe_kamar_id)
+  }
   showModal.value = true
 }
 
 async function submitForm() {
-  if (!form.value.nomor_kamar || !form.value.tipe_kamar_id) return
+  if (!form.value.nomor_kamar || !form.value.tipe_kamar_id) {
+    alert('Nomor kamar dan Tipe kamar wajib diisi!')
+    return
+  }
+
   saving.value = true
+  
+  // Pastikan tipe data sesuai dengan kebutuhan backend
+  const payload = {
+    ...form.value,
+    tipe_kamar_id: Number(form.value.tipe_kamar_id)
+  }
+
   try {
     if (editingId.value) {
-      await api.put(`/admin/kamar/${editingId.value}`, form.value)
+      await api.put(`/admin/kamar/${editingId.value}`, payload)
       const idx = kamarList.value.findIndex((k) => k.id === editingId.value)
-      if (idx !== -1) kamarList.value[idx] = { ...form.value, id: editingId.value }
+      if (idx !== -1) kamarList.value[idx] = { ...payload, id: editingId.value }
     } else {
-      const res = await api.post('/admin/kamar', form.value)
+      const res = await api.post('/admin/kamar', payload)
       const newKamar = res.data?.data || res.data
-      kamarList.value.push(newKamar)
+      kamarList.value.push(newKamar.id ? newKamar : { ...payload, id: Date.now() })
     }
     showToast('Data kamar berhasil disimpan.')
   } catch (error) {
     console.error('Gagal menyimpan di server:', error)
     if (editingId.value) {
       const idx = kamarList.value.findIndex((k) => k.id === editingId.value)
-      if (idx !== -1) kamarList.value[idx] = { ...form.value, id: editingId.value }
+      if (idx !== -1) kamarList.value[idx] = { ...payload, id: editingId.value }
     } else {
       const newId = Math.max(0, ...kamarList.value.map((k) => k.id || 0)) + 1
-      kamarList.value.push({ ...form.value, id: newId })
+      kamarList.value.push({ ...payload, id: newId })
     }
     showToast('Data kamar disimpan (lokal).')
   } finally {
@@ -147,6 +160,8 @@ async function deleteKamar(id) {
 
 function logout() {
   localStorage.removeItem('token')
+  localStorage.removeItem('velora_token')
+  localStorage.removeItem('velora_user')
   router.push('/login')
 }
 
@@ -257,7 +272,8 @@ const menuItems = [
         </div>
         <div class="fieldset">
           <label>Tipe Kamar</label>
-          <select v-model="form.tipe_kamar_id">
+          <select v-model.number="form.tipe_kamar_id">
+            <option value="" disabled>-- Pilih Tipe Kamar --</option>
             <option v-for="t in tipeKamarList" :key="t.id" :value="t.id">
               {{ t.nama }}
             </option>

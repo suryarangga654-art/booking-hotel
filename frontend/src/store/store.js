@@ -14,18 +14,20 @@ function safeRead(key, fallback) {
 
 function safeWrite(key, value) {
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    if (value === null || value === undefined) {
+      localStorage.removeItem(key)
+    } else {
+      localStorage.setItem(key, JSON.stringify(value))
+    }
   } catch {
-    // ignore localStorage quota issues in non-browser fallback
+    // ignore quota error
   }
 }
 
-// Store sementara di memori (frontend-only).
-// Nanti fungsi login/register di bawah ini tinggal
-// diganti isinya dengan pemanggilan fetch/axios ke backend.
 export const store = reactive({
   user: safeRead('velora_user', null),
   users: safeRead('velora_users', []),
+  token: localStorage.getItem('velora_token') || localStorage.getItem('token') || '',
   rooms: [
     { id: 1, name: 'Kamar Rimba', desc: 'Kamar tenang menghadap taman tropis dengan tempat tidur kayu jati dan balkon pribadi.', capacity: 2, price: 650000, status: 'tersedia' },
     { id: 2, name: 'Suite Pesisir', desc: 'Suite luas berpemandangan laut, area duduk terpisah, dan kamar mandi terbuka.', capacity: 3, price: 1250000, status: 'tersedia' },
@@ -34,9 +36,28 @@ export const store = reactive({
   ],
   bookings: [],
   nextBookingId: 1,
+
+  // Method reaktif untuk memperbarui user saat login
+  setUser(userData, tokenData = '') {
+    this.user = userData
+    if (tokenData) {
+      this.token = tokenData
+      localStorage.setItem('token', tokenData)
+      localStorage.setItem('velora_token', tokenData)
+    }
+    safeWrite('velora_user', userData)
+  },
+
+  // Method reaktif untuk hapus user saat logout
+  clearUser() {
+    this.user = null
+    this.token = ''
+    localStorage.removeItem('velora_user')
+    localStorage.removeItem('velora_token')
+    localStorage.removeItem('token')
+  }
 })
 
-// Label + warna badge untuk tiap status kamar (dipakai di halaman tamu)
 export const roomStatusInfo = {
   tersedia: { label: 'Tersedia', className: 'status-tersedia', bookable: true },
   terisi: { label: 'Sedang Terisi', className: 'status-terisi', bookable: false },
@@ -52,8 +73,7 @@ export function login(email, password) {
       email: found.email,
       avatar: found.avatar || defaultUserAvatar,
     }
-    store.user = userData
-    safeWrite('velora_user', userData)
+    store.setUser(userData)
     return { ok: true }
   }
   return { ok: false, error: 'Email atau kata sandi salah. Belum punya akun? Daftar dulu.' }
@@ -67,20 +87,17 @@ export function register({ name, email, password, avatar }) {
   store.users.push(userData)
   safeWrite('velora_users', store.users)
 
-  store.user = { name, email, avatar: userData.avatar }
-  safeWrite('velora_user', store.user)
+  store.setUser({ name, email, avatar: userData.avatar })
   return { ok: true }
 }
 
 export function logout() {
-  store.user = null
-  safeWrite('velora_user', null)
+  store.clearUser()
 }
 
-export function addBooking({ roomId, guestName, checkIn, checkOut }) {
+export function addBooking({ roomId, guestName, checkIn, checkOut, status_pemesanan = 'menunggu', status_pembayaran = 'menunggu_verifikasi' }) {
   const room = store.rooms.find(r => r.id === roomId)
 
-  // Cegah booking kalau kamar ternyata sedang tidak tersedia
   if (!room || room.status !== 'tersedia') {
     return { ok: false, error: 'Kamar ini sedang tidak tersedia untuk dipesan.' }
   }
@@ -93,8 +110,8 @@ export function addBooking({ roomId, guestName, checkIn, checkOut }) {
     checkIn,
     checkOut,
     status: 'pending',
-    status_pemesanan: 'menunggu',
-    status_pembayaran: 'belum_dibayar',
+    status_pemesanan,
+    status_pembayaran,
     tipe_kamar: room.name,
     jumlah_total: room.price * Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24))),
     kode_pemesanan: `VLR-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${String(store.nextBookingId).padStart(3, '0')}`,
@@ -108,12 +125,10 @@ export function addBooking({ roomId, guestName, checkIn, checkOut }) {
     tanggal_check_out: checkOut,
     kode_pemesanan: newBooking.kode_pemesanan,
     jumlah_total: newBooking.jumlah_total,
-    status_pemesanan: 'menunggu',
-    status_pembayaran: 'belum_dibayar',
+    status_pemesanan,
+    status_pembayaran,
   })
 
-  // Begitu ada yang pesan, kamar langsung ditandai terisi
-  // biar tamu lain nggak bisa pesan kamar yang sama
   room.status = 'terisi'
 
   return { ok: true }

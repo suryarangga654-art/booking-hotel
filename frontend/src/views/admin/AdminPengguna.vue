@@ -34,6 +34,8 @@ const menuItems = [
 
 function logout() {
   localStorage.removeItem('token')
+  localStorage.removeItem('velora_token')
+  localStorage.removeItem('velora_user')
   router.push('/login')
 }
 
@@ -41,20 +43,37 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await api.get('/admin/users')
-    userList.value = res.data
+    console.log('Response BE:', res.data) // Debugging struktur respons backend
+    
+    let rawData = []
+
+    // Mendukung berbagai kemungkinan format JSON dari Laravel (Paginate / Collection / Array)
+    if (Array.isArray(res.data)) {
+      rawData = res.data
+    } else if (Array.isArray(res.data?.data)) {
+      rawData = res.data.data
+    } else if (Array.isArray(res.data?.data?.data)) {
+      // Format jika Backend memakai Paginate dalam Resource
+      rawData = res.data.data.data
+    } else if (res.data?.users && Array.isArray(res.data.users)) {
+      rawData = res.data.users
+    }
+
+    // Map data murni dari backend tanpa mengalihkan ke dummy data
+    userList.value = rawData.map(u => ({
+      id: u.id,
+      nama: u.name || u.nama || u.username || 'Tanpa Nama',
+      email: u.email || '-',
+      telepon: u.phone || u.telepon || u.no_hp || '-',
+      role: u.role || 'tamu'
+    }))
+
   } catch (err) {
-    loadDummyData()
+    console.error('Gagal mengambil data dari BE:', err)
+    showToast('Gagal memuat data dari server.')
   } finally {
     loading.value = false
   }
-}
-
-function loadDummyData() {
-  userList.value = [
-    { id: 1, nama: 'Faizal Admin', email: 'admin@velora.com', telepon: '081234567890', role: 'admin' },
-    { id: 2, nama: 'Siti Frontdesk', email: 'resepsionis@velora.com', telepon: '081987654321', role: 'resepsionis' },
-    { id: 3, nama: 'Budi Santoso', email: 'budi@gmail.com', telepon: '085211223344', role: 'tamu' }
-  ]
 }
 
 onMounted(fetchData)
@@ -68,7 +87,7 @@ const filteredUsers = computed(() => {
   if (!searchQuery.value.trim()) return userList.value
   const q = searchQuery.value.toLowerCase()
   return userList.value.filter(
-    (u) => u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    (u) => (u.nama || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
   )
 })
 
@@ -80,33 +99,46 @@ function openAddModal() {
 
 function openEditModal(u) {
   editingUserId.value = u.id
-  userForm.value = { ...u }
+  userForm.value = { 
+    nama: u.nama || '',
+    email: u.email || '',
+    telepon: u.telepon !== '-' ? u.telepon : '',
+    role: u.role || 'tamu'
+  }
   showModal.value = true
 }
 
 async function submitUser() {
-  if (!userForm.value.nama || !userForm.value.email) return
+  if (!userForm.value.nama || !userForm.value.email) {
+    alert('Nama dan Email wajib diisi!')
+    return
+  }
+
   saving.value = true
+  const payload = {
+    name: userForm.value.nama,
+    nama: userForm.value.nama,
+    email: userForm.value.email,
+    phone: userForm.value.telepon,
+    telepon: userForm.value.telepon,
+    role: userForm.value.role
+  }
+
   try {
     if (editingUserId.value) {
-      await api.put(`/admin/users/${editingUserId.value}`, userForm.value)
-      const idx = userList.value.findIndex((u) => u.id === editingUserId.value)
-      if (idx !== -1) userList.value[idx] = { ...userForm.value, id: editingUserId.value }
+      await api.put(`/admin/users/${editingUserId.value}`, payload)
     } else {
-      const res = await api.post('/admin/users', userForm.value)
-      userList.value.push(res.data)
+      await api.post('/admin/users', payload)
     }
-  } catch (e) {
-    if (editingUserId.value) {
-      const idx = userList.value.findIndex((u) => u.id === editingUserId.value)
-      if (idx !== -1) userList.value[idx] = { ...userForm.value, id: editingUserId.value }
-    } else {
-      userList.value.push({ ...userForm.value, id: Date.now() })
-    }
-  } finally {
-    saving.value = false
+    await fetchData() // Refresh data murni dari DB setelah simpan
     showModal.value = false
     showToast('Data pengguna berhasil disimpan.')
+  } catch (e) {
+    console.error('Gagal menyimpan:', e)
+    const errorMsg = e.response?.data?.message || 'Gagal menyimpan data ke backend.'
+    alert(errorMsg)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -114,9 +146,13 @@ async function deleteUser(id) {
   if (!confirm('Hapus pengguna ini?')) return
   try {
     await api.delete(`/admin/users/${id}`)
-  } catch (e) {}
-  userList.value = userList.value.filter((u) => u.id !== id)
-  showToast('Pengguna dihapus.')
+    await fetchData() // Refresh data murni dari DB setelah hapus
+    showToast('Pengguna berhasil dihapus.')
+  } catch (e) {
+    console.error('Gagal menghapus:', e)
+    const errorMsg = e.response?.data?.message || 'Gagal menghapus pengguna.'
+    alert(errorMsg)
+  }
 }
 </script>
 
@@ -174,10 +210,15 @@ async function deleteUser(id) {
                 </tr>
               </thead>
               <tbody>
+                <tr v-if="filteredUsers.length === 0">
+                  <td colspan="5" class="empty-state">
+                    Tidak ada data pengguna ditemukan.
+                  </td>
+                </tr>
                 <tr v-for="u in filteredUsers" :key="u.id">
                   <td class="font-bold">{{ u.nama }}</td>
                   <td>{{ u.email }}</td>
-                  <td>{{ u.telepon || '-' }}</td>
+                  <td>{{ u.telepon }}</td>
                   <td>
                     <span class="role-badge" :class="u.role">{{ u.role }}</span>
                   </td>
@@ -247,6 +288,7 @@ async function deleteUser(id) {
 .topbar h1 { margin: 0 0 4px; color: #0f172a; font-family: Georgia, serif; font-size: 26px; }
 .topbar p { margin: 0 0 24px; color: #64748b; font-size: 14px; }
 .loading-state { text-align: center; color: #64748b; padding: 40px; }
+.empty-state { text-align: center; color: #64748b; padding: 24px; }
 .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 15px rgba(15,23,42,0.04); }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
 .search-input { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px; outline: none; }

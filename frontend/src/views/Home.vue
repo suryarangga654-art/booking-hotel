@@ -8,40 +8,26 @@ const router = useRouter()
 const reviews = ref([])
 const loadingReviews = ref(true)
 
-// URL Video Stok Hotel/Resort Luxury (Mixkit HD CDN)
+// URL Video Stok Hotel/Resort Luxury
 const resortVideoUrl = '/videos/resort.mp4'
 
-// Gambar untuk kolom kanan hero (ganti sesuai foto resort kamu)
+// Gambar fallback / default hero
 const resortImageUrl = '/salah.jpg'
 
 async function fetchReviews() {
   loadingReviews.value = true
 
   try {
+    // Memanggil endpoint publik /api/ulasan (tanpa token)
     const res = await api.get('/ulasan')
-    const data = Array.isArray(res.data) ? res.data : []
-    reviews.value = data.filter((review) => review.tampil !== false)
+    const rawData = res.data?.data || res.data
+    const arrayData = Array.isArray(rawData) ? rawData : Object.values(rawData || {})
+    
+    // Filter ulasan yang valid/tampil
+    reviews.value = arrayData.filter((review) => review.tampil !== false)
   } catch (error) {
-    reviews.value = [
-      {
-        id: 1,
-        nama_tamu: 'Rian Prasetya',
-        tipe_kamar: 'Suite Pesisir',
-        rating: 5,
-        komentar: 'Pelayanan sangat ramah dan kamarnya nyaman banget, suasana resort juga tenang.',
-        tanggal: '2026-09-10',
-        tampil: true,
-      },
-      {
-        id: 2,
-        nama_tamu: 'Dewi Lestari',
-        tipe_kamar: 'Kamar Rimba',
-        rating: 4,
-        komentar: 'Kamar bersih dan pemandangannya asri, cocok untuk liburan santai.',
-        tanggal: '2026-09-08',
-        tampil: true,
-      },
-    ]
+    console.error('Gagal mengambil data ulasan publik:', error)
+    reviews.value = []
   } finally {
     loadingReviews.value = false
   }
@@ -53,8 +39,16 @@ function goToBooking(room) {
   router.push(`/booking/${room.id}`)
 }
 
+// Format harga mata uang Rupiah
 function formatPrice(n) {
-  return n.toLocaleString('id-ID')
+  return Number(n || 0).toLocaleString('id-ID')
+}
+
+// Helper format tanggal ulasan
+function formatDate(dateString) {
+  if (!dateString) return 'Baru saja'
+  const options = { year: 'numeric', month: 'short', day: 'numeric' }
+  return new Date(dateString).toLocaleDateString('id-ID', options)
 }
 
 const roomPhotos = {
@@ -128,12 +122,13 @@ const roomPhotos = {
     <section class="section" id="rooms">
       <div class="section-head">
         <h2>Kamar &amp; Villa</h2>
-        <span>{{ store.rooms.length }} pilihan tersedia</span>
+        <span>{{ store.rooms ? store.rooms.length : 0 }} pilihan tersedia</span>
       </div>
       <div class="rooms">
         <div class="room-card" v-for="room in store.rooms" :key="room.id">
           <div class="room-art">
-            <img :src="roomPhotos[room.id]" :alt="room.name" />
+            <!-- Fallback gambar jika room.id tidak ada di roomPhotos -->
+            <img :src="roomPhotos[room.id] || resortImageUrl" :alt="room.name || 'Foto Kamar'" />
           </div>
           <h3>{{ room.name }}</h3>
           <p class="desc">{{ room.desc }}</p>
@@ -148,6 +143,7 @@ const roomPhotos = {
       </div>
     </section>
 
+    <!-- SECTION ULASAN TAMU -->
     <section class="section reviews-section">
       <div class="section-head">
         <h2>Ulasan Tamu</h2>
@@ -160,16 +156,20 @@ const roomPhotos = {
         <article v-for="review in reviews" :key="review.id" class="review-card">
           <div class="review-header">
             <div>
-              <strong>{{ review.nama_tamu || 'Tamu' }}</strong>
-              <p>{{ review.tipe_kamar || 'Kamar' }}</p>
+              <strong>
+                {{ review.nama_tamu || review.pemesanan?.user?.nama || review.user?.nama || 'Tamu Anonim' }}
+              </strong>
+              <p>
+                {{ review.tipe_kamar || review.pemesanan?.detail_pemesanan?.[0]?.kamar?.tipe_kamar?.nama_tipe || 'Kamar Resort' }}
+              </p>
             </div>
-            <span class="stars">{{ '★'.repeat(review.rating || 0) }}</span>
+            <span class="stars">{{ '★'.repeat(review.penilaian || review.rating || 0) }}</span>
           </div>
 
           <p class="review-comment">"{{ review.komentar || 'Tidak ada komentar.' }}"</p>
 
           <div class="review-footer">
-            <span>{{ review.tanggal || 'Baru' }}</span>
+            <span>{{ formatDate(review.created_at || review.tanggal) }}</span>
           </div>
         </article>
 
@@ -488,6 +488,9 @@ const roomPhotos = {
   background: #0369a1;
 }
 
+/* =========================================
+   REVIEWS SECTION
+   ========================================= */
 .reviews-section {
   padding-top: 8px;
 }
