@@ -23,6 +23,8 @@ const menuItems = [
 
 function logout() {
   localStorage.removeItem('token')
+  localStorage.removeItem('velora_token')
+  localStorage.removeItem('velora_user')
   router.push('/login')
 }
 
@@ -30,8 +32,11 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await api.get('/admin/ulasan')
-    ulasanList.value = res.data
+    // Penanganan fleksibel untuk format response Laravel (res.data atau res.data.data)
+    const raw = res.data?.data || res.data
+    ulasanList.value = Array.isArray(raw) ? raw : []
   } catch (err) {
+    console.error('Gagal mengambil data ulasan dari BE, memuat fallback dummy:', err)
     loadDummyData()
   } finally {
     loading.value = false
@@ -70,24 +75,31 @@ function showToast(msg) {
 
 const filteredUlasan = computed(() => {
   if (filterRating.value === 'semua') return ulasanList.value
-  return ulasanList.value.filter((u) => u.rating === Number(filterRating.value))
+  return ulasanList.value.filter((u) => Number(u.rating) === Number(filterRating.value))
 })
 
 async function toggleTampil(u) {
-  u.tampil = !u.tampil
+  const statusAwal = u.tampil
+  u.tampil = !u.tampil // Optimistic update UI
+
   try {
     await api.put(`/admin/ulasan/${u.id}`, { tampil: u.tampil })
-  } catch (e) {}
-  showToast(u.tampil ? 'Ulasan ditampilkan.' : 'Ulasan disembunyikan.')
+    showToast(u.tampil ? 'Ulasan ditampilkan.' : 'Ulasan disembunyikan.')
+  } catch (e) {
+    u.tampil = statusAwal // Rollback jika BE gagal/error
+    showToast('Gagal mengubah status ulasan.')
+  }
 }
 
 async function deleteUlasan(id) {
   if (!confirm('Hapus ulasan ini secara permanen?')) return
   try {
     await api.delete(`/admin/ulasan/${id}`)
-  } catch (e) {}
-  ulasanList.value = ulasanList.value.filter((u) => u.id !== id)
-  showToast('Ulasan dihapus.')
+    ulasanList.value = ulasanList.value.filter((u) => u.id !== id)
+    showToast('Ulasan berhasil dihapus.')
+  } catch (e) {
+    showToast('Gagal menghapus ulasan dari database.')
+  }
 }
 </script>
 
@@ -144,14 +156,15 @@ async function deleteUlasan(id) {
             <div v-for="u in filteredUlasan" :key="u.id" class="ulasan-card" :class="{ hidden: !u.tampil }">
               <div class="ulasan-head">
                 <div>
-                  <strong class="tamu-name">{{ u.nama_tamu }}</strong>
-                  <span class="room-type"> • {{ u.tipe_kamar }}</span>
+                  <!-- Penanganan pembacaan property langsung maupun via relasi Eloquent -->
+                  <strong class="tamu-name">{{ u.nama_tamu || u.user?.name || 'Tamu' }}</strong>
+                  <span class="room-type"> • {{ u.tipe_kamar || u.tipe_kamar?.nama || 'Kamar' }}</span>
                 </div>
                 <span class="rating-stars">★ {{ u.rating }}/5</span>
               </div>
               <p class="komentar">"{{ u.komentar }}"</p>
               <div class="ulasan-footer">
-                <span class="date">{{ u.tanggal }}</span>
+                <span class="date">{{ u.tanggal || u.created_at?.split('T')[0] }}</span>
                 <div class="actions">
                   <button class="btn-toggle" @click="toggleTampil(u)">
                     {{ u.tampil ? '👁️ Sembunyikan' : '🙈 Tampilkan' }}

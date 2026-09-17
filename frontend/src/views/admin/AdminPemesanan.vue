@@ -18,21 +18,46 @@ const searchQuery = ref('')
 function normalizePemesananList(payload) {
   const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
 
-  return list.map((p) => ({
-    ...p,
-    id: p.id ?? p.pemesanan_id,
-    kode_pemesanan: p.kode_pemesanan ?? p.kode ?? 'N/A',
-    nama_tamu: p.nama_tamu ?? p.user?.name ?? p.guest_name ?? 'Tamu',
-    email: p.email ?? p.user?.email ?? '-',
-    tipe_kamar: p.tipe_kamar ?? p.kamar?.nama ?? p.room_name ?? p.tipe_kamar_name ?? '-',
-    nomor_kamar: p.nomor_kamar ?? p.kamar?.nomor_kamar ?? '-',
-    tanggal_check_in: p.tanggal_check_in ?? p.check_in ?? p.checkIn ?? '',
-    tanggal_check_out: p.tanggal_check_out ?? p.check_out ?? p.checkOut ?? '',
-    jumlah_total: Number(p.jumlah_total ?? p.total ?? p.amount ?? 0),
-    status_pemesanan: p.status_pemesanan ?? p.status ?? 'menunggu',
-    status_pembayaran: p.status_pembayaran ?? p.payment_status ?? 'belum_dibayar',
-    layanan: Array.isArray(p.layanan) ? p.layanan : (p.layanan ? [p.layanan] : []),
-  }))
+  return list.map((p) => {
+    // Menelusuri berbagai kemungkinan struktur relasi kamar dari backend Laravel
+    const detailPertama = p.detail_pemesanan?.[0] || p.detailPemesanan?.[0] || {}
+    const kamarData = p.kamar || detailPertama.kamar || {}
+    const tipeKamarData = kamarData.tipe_kamar || kamarData.tipeKamar || p.tipe_kamar_relasi || {}
+
+    // Mengambil nama tipe kamar dari berbagai alternatif key
+    const namaTipeKamar = 
+      tipeKamarData.nama_tipe_kamar || 
+      tipeKamarData.nama || 
+      tipeKamarData.name || 
+      kamarData.nama_tipe_kamar || 
+      kamarData.tipe_kamar_nama || 
+      p.tipe_kamar || 
+      'Kamar Standar'
+
+    // Mengambil nomor kamar dari berbagai alternatif key
+    const nomorKamar = 
+      kamarData.nomor_kamar || 
+      kamarData.nomor || 
+      detailPertama.nomor_kamar || 
+      p.nomor_kamar || 
+      '-'
+
+    return {
+      ...p,
+      id: p.id ?? p.pemesanan_id,
+      kode_pemesanan: p.kode_pemesanan ?? p.kode ?? 'N/A',
+      nama_tamu: p.nama_tamu ?? p.user?.name ?? p.guest_name ?? 'Tamu',
+      email: p.email ?? p.user?.email ?? '-',
+      tipe_kamar: namaTipeKamar,
+      nomor_kamar: nomorKamar,
+      tanggal_check_in: p.tanggal_check_in ?? detailPertama.tanggal_check_in ?? p.check_in ?? p.checkIn ?? '',
+      tanggal_check_out: p.tanggal_check_out ?? detailPertama.tanggal_check_out ?? p.check_out ?? p.checkOut ?? '',
+      jumlah_total: Number(p.jumlah_total ?? p.total ?? p.amount ?? 0),
+      status_pemesanan: p.status_pemesanan ?? p.status ?? 'menunggu',
+      status_pembayaran: p.status_pembayaran ?? p.payment_status ?? 'belum_dibayar',
+      layanan: Array.isArray(p.layanan) ? p.layanan : (p.layanan ? [p.layanan] : []),
+    }
+  })
 }
 
 async function fetchData() {
@@ -118,7 +143,7 @@ function showToast(msg) {
 }
 
 const statusPemesananOptions = ['menunggu', 'dikonfirmasi', 'check_in', 'check_out', 'dibatalkan']
-const statusPembayaranOptions = ['belum_dibayar', 'dibayar_sebagian', 'lunas', 'dikembalikan']
+const statusPembayaranOptions = ['belum_dibayar', 'menunggu_verifikasi', 'dibayar_sebagian', 'lunas', 'dikembalikan']
 
 const statusPemesananLabel = {
   menunggu: 'Menunggu',
@@ -130,6 +155,7 @@ const statusPemesananLabel = {
 
 const statusPembayaranLabel = {
   belum_dibayar: 'Belum Dibayar',
+  menunggu_verifikasi: 'Menunggu Verifikasi',
   dibayar_sebagian: 'Dibayar Sebagian',
   lunas: 'Lunas',
   dikembalikan: 'Dikembalikan',
@@ -161,13 +187,11 @@ const filteredList = computed(() => {
 // UPDATE STATUS
 // ============================================
 async function updateStatusPemesanan(p, status) {
-  const prev = p.status_pemesanan
   p.status_pemesanan = status
   try {
     await api.put(`/admin/pemesanan/${p.id}`, { status_pemesanan: status })
     showToast(`Status pemesanan ${p.kode_pemesanan} diperbarui.`)
   } catch (error) {
-    // biarkan perubahan lokal tetap berlaku sebagai fallback
     showToast(`Status pemesanan ${p.kode_pemesanan} diperbarui (lokal).`)
   }
 }
@@ -203,6 +227,8 @@ const jumlahMalam = computed(() => {
 
 function logout() {
   localStorage.removeItem('token')
+  localStorage.removeItem('velora_token')
+  localStorage.removeItem('velora_user')
   router.push('/login')
 }
 

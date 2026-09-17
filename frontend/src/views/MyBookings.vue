@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { store, bookingListStore } from '../store/store' // Tambahkan bookingListStore atau state global
+import { store, bookingListStore } from '../store/store'
 import api from '../utils/api'
 
 const router = useRouter()
@@ -10,16 +10,14 @@ const loading = ref(true)
 const bookingList = ref([])
 const filterStatus = ref('semua')
 
-// Kalau belum login, lempar ke halaman login dulu
-if (!store.user) {
-  router.push('/login')
-}
-
 async function fetchBookings() {
   loading.value = true
   try {
-    const res = await api.get('/pemesanan/saya')
-    bookingList.value = res.data
+    // 1. DIUBAH: Gunakan endpoint prefix /tamu agar tidak kena 403 Forbidden
+    const res = await api.get('/tamu/pemesanan')
+    
+    // Sesuaikan penanganan struktur response dari Laravel
+    bookingList.value = res.data?.data || res.data || []
   } catch (error) {
     console.error('Gagal memuat pemesanan dari API, menggunakan data lokal/store:', error)
     loadDummyData()
@@ -29,7 +27,6 @@ async function fetchBookings() {
 }
 
 function loadDummyData() {
-  // Jika di store/store.js sudah menyimpan data booking, gunakan itu; jika kosong, pakai default
   if (bookingListStore && bookingListStore.value && bookingListStore.value.length > 0) {
     bookingList.value = bookingListStore.value
     return
@@ -69,7 +66,16 @@ function loadDummyData() {
   ]
 }
 
-onMounted(fetchBookings)
+onMounted(() => {
+  // 2. DIUBAH: Cek token di localStorage, bukan hanya bergantung pada store.user
+  const token = localStorage.getItem('token') || localStorage.getItem('velora_token')
+  if (!token && !store.user) {
+    router.push('/login')
+    return
+  }
+
+  fetchBookings()
+})
 
 function formatRupiah(n) {
   return 'Rp' + Number(n).toLocaleString('id-ID')
@@ -95,6 +101,7 @@ const statusPemesananLabel = {
 
 const statusPembayaranLabel = {
   belum_dibayar: 'Belum Dibayar',
+  menunggu_verifikasi: 'Menunggu Verifikasi',
   dibayar_sebagian: 'Dibayar Sebagian',
   lunas: 'Lunas',
   dikembalikan: 'Dana Dikembalikan',

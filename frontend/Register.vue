@@ -2,18 +2,24 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { register } from '../store/store'
+import { store } from './src/store/store'
+import api from './src/utils/api'
 
 const router = useRouter()
-
 const name = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const error = ref('')
+const loading = ref(false)
 
-function submit() {
+async function submit() {
   error.value = ''
+
+  if (!name.value.trim()) {
+    error.value = 'Nama lengkap harus diisi.'
+    return
+  }
 
   if (password.value.length < 4) {
     error.value = 'Kata sandi minimal 4 karakter.'
@@ -25,115 +31,102 @@ function submit() {
     return
   }
 
-  const res = register({
-    name: name.value,
-    email: email.value,
-    password: password.value
-  })
+  loading.value = true
+  try {
+    const credentials = {
+      name: name.value.trim(),
+      email: email.value.trim(),
+      password: password.value,
+      password_confirmation: confirmPassword.value,
+      role: 'tamu',
+    }
 
-  if (!res.ok) {
-    error.value = res.error
-    return
+    const registerResponse = await api.post('/register', credentials)
+    const responseBody = registerResponse.data || {}
+    const responseData = responseBody.data || responseBody
+    const loginResponse = responseData.token || responseData.access_token
+      ? registerResponse
+      : await api.post('/login', {
+          email: credentials.email,
+          password: credentials.password,
+        })
+    const loginBody = loginResponse.data || {}
+    const loginData = loginBody.data || loginBody
+    const token = String(
+      loginData.token || loginData.access_token || loginData.accessToken ||
+      loginBody.token || loginBody.access_token || loginBody.accessToken || ''
+    ).replace(/^Bearer\s+/i, '').trim()
+
+    if (!token) {
+      throw new Error('Token login tidak ditemukan dari server.')
+    }
+
+    const user = loginData.user || loginBody.user || {
+      name: credentials.name,
+      email: credentials.email,
+      role: 'tamu',
+    }
+    user.role = String(user.role || 'tamu').trim().toLowerCase()
+    localStorage.setItem('token', token)
+    localStorage.setItem('velora_token', token)
+    localStorage.setItem('velora_user', JSON.stringify(user))
+    store.user = user
+    router.push('/')
+  } catch (err) {
+    const validationErrors = err.response?.data?.errors
+    error.value = validationErrors
+      ? Object.values(validationErrors).flat()[0]
+      : err.response?.data?.message || err.message || 'Pendaftaran gagal. Coba lagi nanti.'
+  } finally {
+    loading.value = false
   }
-
-  router.push('/')
 }
 </script>
 
 <template>
   <div class="auth-page">
     <div class="auth-card">
-
       <div class="auth-header">
         <div class="auth-logo">
           <span class="logo-mark"></span>
           <span>VELORA</span>
         </div>
-
         <h1>Buat akun baru</h1>
-
-        <p>
-          Daftar untuk mulai memesan kamar di Nirwana Stay.
-        </p>
+        <p>Daftar untuk mulai memesan kamar di Velora Resort.</p>
       </div>
 
       <form @submit.prevent="submit">
-
         <div class="form-group">
           <label for="name">Nama lengkap</label>
-
-          <input
-            id="name"
-            v-model="name"
-            type="text"
-            placeholder="Masukkan nama lengkap"
-            autocomplete="name"
-            required
-          />
+          <input id="name" v-model="name" type="text" placeholder="Masukkan nama lengkap" autocomplete="name" required />
         </div>
 
         <div class="form-group">
           <label for="email">Email</label>
-
-          <input
-            id="email"
-            v-model="email"
-            type="email"
-            placeholder="Masukkan email"
-            autocomplete="email"
-            required
-          />
+          <input id="email" v-model="email" type="email" placeholder="Masukkan email" autocomplete="email" required />
         </div>
 
         <div class="form-group">
           <label for="password">Kata sandi</label>
-
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            placeholder="Minimal 4 karakter"
-            autocomplete="new-password"
-            required
-          />
+          <input id="password" v-model="password" type="password" placeholder="Minimal 4 karakter" autocomplete="new-password" required />
         </div>
 
         <div class="form-group">
-          <label for="confirmPassword">
-            Ulangi kata sandi
-          </label>
-
-          <input
-            id="confirmPassword"
-            v-model="confirmPassword"
-            type="password"
-            placeholder="Ulangi kata sandi"
-            autocomplete="new-password"
-            required
-          />
+          <label for="confirmPassword">Ulangi kata sandi</label>
+          <input id="confirmPassword" v-model="confirmPassword" type="password" placeholder="Ulangi kata sandi" autocomplete="new-password" required />
         </div>
 
-        <p v-if="error" class="error-message">
-          {{ error }}
-        </p>
+        <p v-if="error" class="error-message">{{ error }}</p>
 
-        <button
-          class="auth-button"
-          type="submit"
-        >
-          Daftar
+        <button class="auth-button" type="submit" :disabled="loading">
+          {{ loading ? 'Mendaftarkan...' : 'Daftar' }}
         </button>
-
       </form>
 
       <div class="auth-switch">
         <span>Sudah punya akun?</span>
-
-        <router-link to="/login">
-          Masuk di sini
-        </router-link>
+        <router-link to="/login">Masuk di sini</router-link>
       </div>
-
     </div>
   </div>
 </template>

@@ -7,11 +7,18 @@ const router = useRouter()
 const showDropdown = ref(false)
 const searchQuery = ref('')
 
-// Contoh data notifikasi (nanti ambil dari store)
+// Hitung notifikasi dari store
 const unreadCount = computed(() => store.unreadNotifications || 0)
+
+// Helper untuk menampilkan nama user dari berbagai kemungkinan field API
+const userName = computed(() => {
+  if (!store.user) return ''
+  return store.user.name || store.user.nama || store.user.email?.split('@')[0] || 'Tamu'
+})
 
 function doLogout() {
   logout()
+  showDropdown.value = false
   router.push('/')
 }
 
@@ -25,7 +32,6 @@ function searchHotel() {
   }
 }
 
-// Tutup dropdown saat klik di luar
 function closeDropdown() {
   showDropdown.value = false
 }
@@ -65,6 +71,7 @@ function closeDropdown() {
         Kamar
       </router-link>
 
+      <!-- TAMU BELUM LOGIN -->
       <template v-if="!store.user">
 
         <router-link
@@ -83,6 +90,7 @@ function closeDropdown() {
 
       </template>
 
+      <!-- TAMU SUDAH LOGIN -->
       <template v-else>
 
         <!-- NOTIFICATIONS -->
@@ -95,10 +103,10 @@ function closeDropdown() {
         <div class="user-menu" @click.stop>
           <button @click="toggleDropdown" class="user-btn">
             <img 
-              :src="store.user.avatar || '/default-avatar.png'" 
+              :src="store.user.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80'" 
               class="avatar" 
             />
-            <span class="who">Hai, {{ store.user.name }}</span>
+            <span class="who">Hai, {{ userName }}</span>
             <span class="arrow" :class="{ rotated: showDropdown }">▼</span>
           </button>
           
@@ -500,5 +508,4 @@ function closeDropdown() {
     right: -20px;
   }
 }
-
 </style>

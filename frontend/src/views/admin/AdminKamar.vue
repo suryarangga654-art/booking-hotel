@@ -24,6 +24,14 @@ function normalizeListPayload(payload) {
   return []
 }
 
+// Helper untuk ekstrak objek tunggal dari respons API
+function extractObjectPayload(payload) {
+  if (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+    return payload.data
+  }
+  return payload
+}
+
 // ============================================
 // FETCH DATA
 // ============================================
@@ -68,7 +76,7 @@ function loadDummyData() {
 onMounted(fetchData)
 
 function tipeKamarNama(id) {
-  const t = tipeKamarList.value.find((t) => t.id === id)
+  const t = tipeKamarList.value.find((t) => Number(t.id) === Number(id))
   return t ? t.nama : '-'
 }
 
@@ -95,7 +103,12 @@ const kamarForm = ref({
 
 function openAddKamar() {
   editingKamarId.value = null
-  kamarForm.value = { nomor_kamar: '', lantai: 1, tipe_kamar_id: '', status: 'tersedia' }
+  kamarForm.value = {
+    nomor_kamar: '',
+    lantai: 1,
+    tipe_kamar_id: tipeKamarList.value.length ? tipeKamarList.value[0].id : '',
+    status: 'tersedia',
+  }
   showKamarModal.value = true
 }
 
@@ -106,31 +119,47 @@ function openEditKamar(kamar) {
 }
 
 async function submitKamar() {
-  if (!kamarForm.value.nomor_kamar || !kamarForm.value.tipe_kamar_id) return
+  if (!kamarForm.value.nomor_kamar || !kamarForm.value.tipe_kamar_id) {
+    alert('Nomor kamar dan Tipe kamar wajib diisi!')
+    return
+  }
+
   saving.value = true
+  
+  // Pastikan tipe data sesuai (number)
+  const payload = {
+    ...kamarForm.value,
+    lantai: Number(kamarForm.value.lantai),
+    tipe_kamar_id: Number(kamarForm.value.tipe_kamar_id)
+  }
+
   try {
     if (editingKamarId.value) {
-      await api.put(`/admin/kamar/${editingKamarId.value}`, kamarForm.value)
+      await api.put(`/admin/kamar/${editingKamarId.value}`, payload)
       const idx = kamarList.value.findIndex((k) => k.id === editingKamarId.value)
-      if (idx !== -1) kamarList.value[idx] = { ...kamarForm.value, id: editingKamarId.value }
+      if (idx !== -1) kamarList.value[idx] = { ...payload, id: editingKamarId.value }
     } else {
-      const res = await api.post('/admin/kamar', kamarForm.value)
-      kamarList.value.push(res.data)
+      const res = await api.post('/admin/kamar', payload)
+      const savedData = extractObjectPayload(res.data)
+      kamarList.value.push(savedData.id ? savedData : { ...payload, id: Date.now() })
     }
     showToast('Data kamar tersimpan.')
+    showKamarModal.value = false
   } catch (error) {
+    console.error('Gagal menyimpan kamar ke API:', error)
+    
     // Fallback lokal kalau API belum tersambung
     if (editingKamarId.value) {
       const idx = kamarList.value.findIndex((k) => k.id === editingKamarId.value)
-      if (idx !== -1) kamarList.value[idx] = { ...kamarForm.value, id: editingKamarId.value }
+      if (idx !== -1) kamarList.value[idx] = { ...payload, id: editingKamarId.value }
     } else {
-      const newId = Math.max(0, ...kamarList.value.map((k) => k.id)) + 1
-      kamarList.value.push({ ...kamarForm.value, id: newId })
+      const newId = kamarList.value.length ? Math.max(...kamarList.value.map((k) => k.id)) + 1 : 1
+      kamarList.value.push({ ...payload, id: newId })
     }
     showToast('Data kamar tersimpan (lokal).')
+    showKamarModal.value = false
   } finally {
     saving.value = false
-    showKamarModal.value = false
   }
 }
 
@@ -139,19 +168,22 @@ async function deleteKamar(id) {
   try {
     await api.delete(`/admin/kamar/${id}`)
   } catch (error) {
-    // lanjut hapus lokal walau API gagal/belum ada
+    console.warn('API delete kamar gagal, menghapus dari state lokal...')
   }
   kamarList.value = kamarList.value.filter((k) => k.id !== id)
   showToast('Kamar dihapus.')
 }
 
-async function updateKamarStatus(kamar, status) {
-  const prev = kamar.status
-  kamar.status = status
+async function updateKamarStatus(kamar, newStatus) {
+  const prevStatus = kamar.status
   try {
-    await api.put(`/admin/kamar/${kamar.id}`, { ...kamar, status })
+    await api.put(`/admin/kamar/${kamar.id}`, { ...kamar, status: newStatus })
+    showToast(`Status kamar ${kamar.nomor_kamar} diubah ke ${kamarStatusLabel[newStatus]}`)
   } catch (error) {
-    // biarkan perubahan lokal tetap berlaku
+    console.error('Gagal update status via API:', error)
+    // Rollback kalau API error
+    kamar.status = prevStatus
+    showToast('Gagal mengubah status kamar di server.')
   }
 }
 
@@ -180,35 +212,48 @@ function openEditTipe(tipe) {
 }
 
 async function submitTipe() {
-  if (!tipeForm.value.nama || !tipeForm.value.harga_dasar) return
+  if (!tipeForm.value.nama || !tipeForm.value.harga_dasar) {
+    alert('Nama dan Harga dasar wajib diisi!')
+    return
+  }
+
   saving.value = true
+  const payload = {
+    ...tipeForm.value,
+    harga_dasar: Number(tipeForm.value.harga_dasar),
+    kapasitas: Number(tipeForm.value.kapasitas),
+  }
+
   try {
     if (editingTipeId.value) {
-      await api.put(`/admin/tipe-kamar/${editingTipeId.value}`, tipeForm.value)
+      await api.put(`/admin/tipe-kamar/${editingTipeId.value}`, payload)
       const idx = tipeKamarList.value.findIndex((t) => t.id === editingTipeId.value)
-      if (idx !== -1) tipeKamarList.value[idx] = { ...tipeForm.value, id: editingTipeId.value }
+      if (idx !== -1) tipeKamarList.value[idx] = { ...payload, id: editingTipeId.value }
     } else {
-      const res = await api.post('/admin/tipe-kamar', tipeForm.value)
-      tipeKamarList.value.push(res.data)
+      const res = await api.post('/admin/tipe-kamar', payload)
+      const savedData = extractObjectPayload(res.data)
+      tipeKamarList.value.push(savedData.id ? savedData : { ...payload, id: Date.now() })
     }
     showToast('Tipe kamar tersimpan.')
+    showTipeModal.value = false
   } catch (error) {
+    console.error('Gagal menyimpan tipe kamar ke API:', error)
     if (editingTipeId.value) {
       const idx = tipeKamarList.value.findIndex((t) => t.id === editingTipeId.value)
-      if (idx !== -1) tipeKamarList.value[idx] = { ...tipeForm.value, id: editingTipeId.value }
+      if (idx !== -1) tipeKamarList.value[idx] = { ...payload, id: editingTipeId.value }
     } else {
-      const newId = Math.max(0, ...tipeKamarList.value.map((t) => t.id)) + 1
-      tipeKamarList.value.push({ ...tipeForm.value, id: newId })
+      const newId = tipeKamarList.value.length ? Math.max(...tipeKamarList.value.map((t) => t.id)) + 1 : 1
+      tipeKamarList.value.push({ ...payload, id: newId })
     }
     showToast('Tipe kamar tersimpan (lokal).')
+    showTipeModal.value = false
   } finally {
     saving.value = false
-    showTipeModal.value = false
   }
 }
 
 async function deleteTipe(id) {
-  const dipakai = kamarList.value.some((k) => k.tipe_kamar_id === id)
+  const dipakai = kamarList.value.some((k) => Number(k.tipe_kamar_id) === Number(id))
   if (dipakai) {
     alert('Tipe kamar ini masih dipakai oleh kamar tertentu. Ubah/hapus kamarnya dulu.')
     return
@@ -217,7 +262,7 @@ async function deleteTipe(id) {
   try {
     await api.delete(`/admin/tipe-kamar/${id}`)
   } catch (error) {
-    // lanjut hapus lokal
+    console.warn('API delete tipe kamar gagal, menghapus dari state lokal...')
   }
   tipeKamarList.value = tipeKamarList.value.filter((t) => t.id !== id)
   showToast('Tipe kamar dihapus.')
@@ -240,6 +285,8 @@ const filteredKamar = computed(() => {
 
 function logout() {
   localStorage.removeItem('token')
+  localStorage.removeItem('velora_token')
+  localStorage.removeItem('velora_user')
   router.push('/login')
 }
 
