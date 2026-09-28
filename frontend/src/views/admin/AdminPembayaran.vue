@@ -9,6 +9,7 @@ const route = useRoute()
 const loading = ref(true)
 const saving = ref(false)
 const toast = ref('')
+const loadError = ref('')
 
 const pembayaranList = ref([])
 const activeFilter = ref('semua')
@@ -22,6 +23,7 @@ const menuItems = [
   { key: 'pemesanan', label: 'Pemesanan', icon: '📋', to: '/admin/pemesanan' },
   { key: 'kamar', label: 'Kamar', icon: '🛏️', to: '/admin/kamar' },
   { key: 'tipe-kamar', label: 'Tipe Kamar', icon: '🏷️', to: '/admin/tipe-kamar' },
+  { key: 'promo', label: 'Promo', icon: '🏷️', to: '/admin/promo' },
   { key: 'pembayaran', label: 'Pembayaran', icon: '💳', to: '/admin/pembayaran' },
   { key: 'ulasan', label: 'Ulasan', icon: '⭐', to: '/admin/ulasan' },
   { key: 'pengguna', label: 'Pengguna', icon: '👥', to: '/admin/pengguna' },
@@ -34,73 +36,94 @@ function logout() {
   router.push('/login')
 }
 
+// ============================================
+// BASE URL untuk file di storage Laravel
+// (menghapus akhiran /api dari baseURL axios, lalu tambah /storage/)
+// Sesuaikan jika struktur baseURL api.js kamu berbeda.
+// ============================================
+const API_ORIGIN = (api.defaults.baseURL || '').replace(/\/api\/?$/, '')
+
+function buildBuktiUrl(path) {
+  if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path // sudah full URL / dummy placeholder
+  return `${API_ORIGIN}/storage/${path}`
+}
+
+// ============================================
+// Label & mapping status SESUAI ENUM BACKEND
+// (kolom `status` di tabel pembayaran hanya menerima:
+//  menunggu | berhasil | gagal | kedaluwarsa)
+// ============================================
+const statusLabel = {
+  menunggu: 'Menunggu Verifikasi',
+  berhasil: 'Lunas',
+  gagal: 'Ditolak',
+  kedaluwarsa: 'Kedaluwarsa',
+}
+
 // Helper untuk Normalisasi Data dari API Laravel
 function normalizePembayaranList(payload) {
-  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
+  const raw = payload?.data ?? payload
+  const list = Array.isArray(raw) ? raw : []
 
   return list.map((item) => {
-    // Menangani struktur data flat maupun relasi nested (misal dari tabel pemesanan atau pembayaran)
-    const p = item.pembayaran ?? item.payment ?? item
+    const pemesanan = item.pemesanan || {}
 
     return {
-      ...item,
-      id: item.id ?? p.id ?? p.pembayaran_id,
-      pemesanan_id: item.pemesanan_id ?? p.pemesanan_id ?? item.booking_id ?? p.booking_id ?? 1,
-      kode_pemesanan: item.kode_pemesanan ?? p.kode_pemesanan ?? item.kode ?? p.kode ?? item.booking?.kode_pemesanan ?? 'N/A',
-      nama_tamu: item.nama_tamu ?? p.nama_tamu ?? item.user?.name ?? p.user?.name ?? item.booking?.user?.name ?? 'Tamu',
-      metode: item.metode ?? p.metode ?? item.metode_pembayaran ?? p.metode_pembayaran ?? 'Transfer',
-      jumlah: Number(item.jumlah ?? p.jumlah ?? item.amount ?? p.amount ?? item.total ?? p.total ?? item.total_harga ?? p.total_harga ?? 0),
-      tanggal: item.tanggal ?? p.tanggal ?? item.created_at ?? p.created_at ?? new Date().toISOString(),
-      status: item.status ?? p.status ?? item.payment_status ?? p.payment_status ?? 'menunggu_verifikasi',
-      bukti_url: item.bukti_url ?? p.bukti_url ?? item.bukti ?? p.bukti ?? item.proof_url ?? p.proof_url ?? item.foto_bukti ?? p.foto_bukti ?? '',
+      id: item.id,
+      pemesanan_id: item.pemesanan_id,
+      kode_pemesanan: pemesanan.kode_pemesanan ?? 'N/A',
+      nama_tamu: pemesanan.nama_tamu ?? pemesanan.user?.name ?? 'Tamu',
+      metode: item.metode_pembayaran ?? '-',
+      nomor_transaksi: item.nomor_transaksi ?? '-',
+      // kolom asli di DB adalah jumlah_bayar, fallback ke total pemesanan kalau kosong
+      jumlah: Number(item.jumlah_bayar ?? pemesanan.jumlah_total ?? 0),
+      // fallback berlapis: waktu_bayar (pembayaran) -> created_at (pembayaran)
+      // -> created_at (pemesanan terkait) -> tanggal_check_in (pemesanan)
+      tanggal:
+        item.waktu_bayar ??
+        item.created_at ??
+        pemesanan.created_at ??
+        pemesanan.tanggal_check_in ??
+        null,
+      // status mentah dari backend: menunggu | berhasil | gagal | kedaluwarsa
+      status: item.status ?? 'menunggu',
+      bukti_url: buildBuktiUrl(item.bukti_transfer),
     }
   })
 }
 
 async function fetchData() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await api.get('/admin/pembayaran')
     pembayaranList.value = normalizePembayaranList(res.data)
   } catch (error) {
-    console.error('Gagal memuat API pembayaran, menggunakan dummy data:', error)
-    loadDummyData()
+    console.error('Gagal memuat pembayaran:', error)
+    loadError.value = error.response?.data?.message || 'Data pembayaran gagal dimuat dari server.'
   } finally {
     loading.value = false
   }
-}
-
-function loadDummyData() {
-  pembayaranList.value = [
-    {
-      id: 101,
-      pemesanan_id: 1,
-      kode_pemesanan: 'VEL-202609-001',
-      nama_tamu: 'Budi Santoso',
-      metode: 'Transfer BCA',
-      jumlah: 1300000,
-      tanggal: '2026-09-12 14:20',
-      status: 'menunggu_verifikasi',
-      bukti_url: 'https://placehold.co/400x600/0f172a/ffffff?text=Bukti+Transfer+BCA'
-    },
-    {
-      id: 102,
-      pemesanan_id: 2,
-      kode_pemesanan: 'VEL-202609-002',
-      nama_tamu: 'Siti Rahma',
-      metode: 'QRIS',
-      jumlah: 2500000,
-      tanggal: '2026-09-13 09:10',
-      status: 'lunas',
-      bukti_url: 'https://placehold.co/400x600/0f172a/ffffff?text=Bukti+QRIS'
-    }
-  ]
 }
 
 onMounted(fetchData)
 
 function formatRupiah(n) {
   return 'Rp' + Number(n || 0).toLocaleString('id-ID')
+}
+
+function formatTanggal(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return String(value) // biarin apa adanya kalau formatnya aneh
+  return d.toLocaleString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function showToast(msg) {
@@ -123,37 +146,42 @@ function openDetail(p) {
   showModal.value = true
 }
 
-async function updateStatus(newStatus) {
+// ============================================
+// KONFIRMASI PEMBAYARAN
+// Memakai endpoint khusus PembayaranController@konfirmasi
+// POST /admin/pembayaran/{id}/konfirmasi  body: { status: 'diterima' | 'ditolak' }
+// ⚠️ Cek routes/api.php kamu — sesuaikan path ini kalau nama route-nya beda.
+// ============================================
+async function updateStatus(action) {
+  // action harus 'diterima' atau 'ditolak' (sesuai validasi controller)
   if (!selectedPayment.value) return
   saving.value = true
 
-  // Mengirim payload lengkap sesuai validasi backend Laravel agar tidak error field is required
-  const payload = {
-    pemesanan_id: selectedPayment.value.pemesanan_id,
-    metode_pembayaran: selectedPayment.value.metode,
-    jumlah: selectedPayment.value.jumlah,
-    status: newStatus
-  }
-
   try {
-    await api.put(`/admin/pembayaran/${selectedPayment.value.id}`, payload)
-    
+    await api.post(`/admin/pembayaran/${selectedPayment.value.id}/konfirmasi`, {
+      status: action,
+    })
+
+    const backendStatus = action === 'diterima' ? 'berhasil' : 'gagal'
     const idx = pembayaranList.value.findIndex((p) => p.id === selectedPayment.value.id)
     if (idx !== -1) {
-      pembayaranList.value[idx].status = newStatus
+      pembayaranList.value[idx].status = backendStatus
     }
-    
-    showToast(`Status pembayaran diperbarui ke ${newStatus.replace('_', ' ')}.`)
+
+    showToast(
+      action === 'diterima'
+        ? 'Pembayaran diverifikasi & pemesanan dikonfirmasi.'
+        : 'Pembayaran ditolak.'
+    )
     showModal.value = false
   } catch (error) {
-    console.error('Gagal memperbarui status pembayaran:', error)
-    // Fallback lokal jika backend masih strict
-    const idx = pembayaranList.value.findIndex((p) => p.id === selectedPayment.value.id)
-    if (idx !== -1) {
-      pembayaranList.value[idx].status = newStatus
-    }
-    showToast(`Status diperbarui (lokal).`)
-    showModal.value = false
+    console.error('Gagal memperbarui status pembayaran:', error.response?.data || error)
+    const msg =
+      error.response?.data?.message ||
+      (error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join(', ')
+        : 'Gagal memperbarui status pembayaran.')
+    showToast(msg)
   } finally {
     saving.value = false
   }
@@ -194,6 +222,9 @@ async function updateStatus(newStatus) {
       </header>
 
       <div v-if="loading" class="loading-state">Memuat data pembayaran...</div>
+      <div v-else-if="loadError" class="loading-state error-state">
+        {{ loadError }} <button class="btn-primary" @click="fetchData">Coba Lagi</button>
+      </div>
 
       <template v-else>
         <section class="panel">
@@ -202,9 +233,10 @@ async function updateStatus(newStatus) {
               <button
                 v-for="f in [
                   { key: 'semua', label: 'Semua' },
-                  { key: 'menunggu_verifikasi', label: 'Perlu Verifikasi' },
-                  { key: 'lunas', label: 'Lunas' },
-                  { key: 'ditolak', label: 'Ditolak' }
+                  { key: 'menunggu', label: 'Perlu Verifikasi' },
+                  { key: 'berhasil', label: 'Lunas' },
+                  { key: 'gagal', label: 'Ditolak' },
+                  { key: 'kedaluwarsa', label: 'Kedaluwarsa' }
                 ]"
                 :key="f.key"
                 class="tab-btn"
@@ -236,10 +268,10 @@ async function updateStatus(newStatus) {
                   <td>{{ p.nama_tamu }}</td>
                   <td>{{ p.metode }}</td>
                   <td>{{ formatRupiah(p.jumlah) }}</td>
-                  <td>{{ p.tanggal }}</td>
+                  <td>{{ formatTanggal(p.tanggal) }}</td>
                   <td>
                     <span class="badge" :class="p.status">
-                      {{ p.status ? p.status.replace('_', ' ') : '-' }}
+                      {{ statusLabel[p.status] || p.status }}
                     </span>
                   </td>
                   <td>
@@ -274,11 +306,14 @@ async function updateStatus(newStatus) {
         <div class="modal-info">
           <div><span>Jumlah Transfer:</span> <strong>{{ formatRupiah(selectedPayment.jumlah) }}</strong></div>
           <div><span>Metode:</span> <strong>{{ selectedPayment.metode }}</strong></div>
+          <div v-if="selectedPayment.nomor_transaksi && selectedPayment.nomor_transaksi !== '-'">
+            <span>No. Transaksi:</span> <strong>{{ selectedPayment.nomor_transaksi }}</strong>
+          </div>
         </div>
 
         <div class="modal-actions">
           <button class="btn-danger" :disabled="saving" @click="updateStatus('ditolak')">Tolak</button>
-          <button class="btn-success" :disabled="saving" @click="updateStatus('lunas')">Verifikasi & Terima</button>
+          <button class="btn-success" :disabled="saving" @click="updateStatus('diterima')">Verifikasi & Terima</button>
         </div>
       </div>
     </div>
@@ -300,9 +335,10 @@ async function updateStatus(newStatus) {
 .topbar h1 { margin: 0 0 4px; color: #0f172a; font-family: Georgia, serif; font-size: 26px; }
 .topbar p { margin: 0 0 24px; color: #64748b; font-size: 14px; }
 .loading-state { text-align: center; color: #64748b; padding: 40px; }
+.error-state { display: grid; justify-items: center; gap: 12px; color: #b91c1c; }
 .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 4px 15px rgba(15,23,42,0.04); }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-.filter-tabs { display: flex; gap: 6px; }
+.filter-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .tab-btn { background: #f1f5f9; border: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; color: #475569; cursor: pointer; }
 .tab-btn.active { background: #0f172a; color: #fff; }
 .search-input { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13.5px; outline: none; }
@@ -312,9 +348,10 @@ async function updateStatus(newStatus) {
 .data-table th { background: #f8fafc; color: #475569; font-weight: 600; }
 .font-bold { font-weight: 600; color: #0f172a; }
 .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
-.badge.menunggu_verifikasi { background: #fef3c7; color: #d97706; }
-.badge.lunas { background: #d1fae5; color: #059669; }
-.badge.ditolak { background: #fee2e2; color: #dc2626; }
+.badge.menunggu { background: #fef3c7; color: #d97706; }
+.badge.berhasil { background: #d1fae5; color: #059669; }
+.badge.gagal { background: #fee2e2; color: #dc2626; }
+.badge.kedaluwarsa { background: #e2e8f0; color: #475569; }
 .btn-link { background: none; border: none; color: #0284c7; font-size: 13px; font-weight: 600; cursor: pointer; }
 .empty-state { text-align: center; color: #94a3b8; padding: 30px; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
@@ -327,6 +364,7 @@ async function updateStatus(newStatus) {
 .modal-info { font-size: 13.5px; color: #334155; margin-bottom: 20px; display: flex; flex-direction: column; gap: 6px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .btn-danger { background: #dc2626; color: #fff; border: none; padding: 9px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+.btn-danger:disabled, .btn-success:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-success { background: #059669; color: #fff; border: none; padding: 9px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
 .toast { position: fixed; bottom: 24px; right: 24px; background: #10b981; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 14px; z-index: 200; }
 </style>

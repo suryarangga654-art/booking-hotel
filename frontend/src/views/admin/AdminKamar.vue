@@ -5,13 +5,18 @@ import api from '../../utils/api'
 
 const router = useRouter()
 
-const activeTab = ref('kamar') // 'kamar' | 'tipe-kamar'
+const activeTab = ref('kamar') // 'kamar' | 'tipe-kamar' | 'layanan'
 const loading = ref(true)
 const saving = ref(false)
 const toast = ref('')
+const loadError = ref('')
 
 const kamarList = ref([])
 const tipeKamarList = ref([])
+const layananList = ref([])
+const fotoFiles = ref([])
+const fotoUploadError = ref('')
+const API_ORIGIN = (api.defaults.baseURL || '').replace(/\/api\/?$/, '')
 
 function normalizeListPayload(payload) {
   if (Array.isArray(payload)) return payload
@@ -37,40 +42,23 @@ function extractObjectPayload(payload) {
 // ============================================
 async function fetchData() {
   loading.value = true
+  loadError.value = ''
   try {
-    const [kamarRes, tipeRes] = await Promise.all([
+    const [kamarRes, tipeRes, layananRes] = await Promise.all([
       api.get('/admin/kamar'),
       api.get('/admin/tipe-kamar'),
+      api.get('/layanan-tambahan'),
     ])
 
     kamarList.value = normalizeListPayload(kamarRes.data)
     tipeKamarList.value = normalizeListPayload(tipeRes.data)
+    layananList.value = normalizeListPayload(layananRes.data)
   } catch (error) {
     console.error('Gagal memuat data kamar:', error)
-    loadDummyData()
+    loadError.value = error.response?.data?.message || 'Data kamar gagal dimuat dari server.'
   } finally {
     loading.value = false
   }
-}
-
-function loadDummyData() {
-  tipeKamarList.value = [
-    { id: 1, nama: 'Kamar Rimba', harga_dasar: 650000, kapasitas: 2, deskripsi: 'Kamar tenang menghadap taman tropis.' },
-    { id: 2, nama: 'Suite Pesisir', harga_dasar: 1250000, kapasitas: 3, deskripsi: 'Suite luas berpemandangan laut.' },
-    { id: 3, nama: 'Kamar Sawah', harga_dasar: 480000, kapasitas: 2, deskripsi: 'Kamar hangat menghadap sawah.' },
-    { id: 4, nama: 'Villa Batu', harga_dasar: 2100000, kapasitas: 4, deskripsi: 'Villa satu lantai dengan kolam pribadi.' },
-  ]
-
-  kamarList.value = [
-    { id: 1, nomor_kamar: '101', lantai: 1, tipe_kamar_id: 1, status: 'tersedia' },
-    { id: 2, nomor_kamar: '102', lantai: 1, tipe_kamar_id: 1, status: 'terisi' },
-    { id: 3, nomor_kamar: '201', lantai: 2, tipe_kamar_id: 2, status: 'tersedia' },
-    { id: 4, nomor_kamar: '202', lantai: 2, tipe_kamar_id: 2, status: 'dibersihkan' },
-    { id: 5, nomor_kamar: '301', lantai: 3, tipe_kamar_id: 3, status: 'terisi' },
-    { id: 6, nomor_kamar: '302', lantai: 3, tipe_kamar_id: 3, status: 'perbaikan' },
-    { id: 7, nomor_kamar: '401', lantai: 4, tipe_kamar_id: 4, status: 'tersedia' },
-    { id: 8, nomor_kamar: '402', lantai: 4, tipe_kamar_id: 4, status: 'tersedia' },
-  ]
 }
 
 onMounted(fetchData)
@@ -78,6 +66,10 @@ onMounted(fetchData)
 function tipeKamarNama(id) {
   const t = tipeKamarList.value.find((t) => Number(t.id) === Number(id))
   return t ? t.nama : '-'
+}
+
+function hitungKamarTipe(id, status) {
+  return kamarList.value.filter((k) => Number(k.tipe_kamar_id) === Number(id) && (!status || k.status === status)).length
 }
 
 function formatRupiah(n) {
@@ -94,15 +86,25 @@ function showToast(msg) {
 // ============================================
 const showKamarModal = ref(false)
 const editingKamarId = ref(null)
+const kamarNumberError = ref('')
 const kamarForm = ref({
   nomor_kamar: '',
   lantai: 1,
   tipe_kamar_id: '',
   status: 'tersedia',
 })
+const isDuplicateRoomNumber = computed(() => {
+  const roomNumber = String(kamarForm.value.nomor_kamar || '').trim().toLocaleLowerCase('id-ID')
+  if (!roomNumber) return false
+  return kamarList.value.some((room) =>
+    String(room.nomor_kamar || '').trim().toLocaleLowerCase('id-ID') === roomNumber &&
+    Number(room.id) !== Number(editingKamarId.value),
+  )
+})
 
 function openAddKamar() {
   editingKamarId.value = null
+  kamarNumberError.value = ''
   kamarForm.value = {
     nomor_kamar: '',
     lantai: 1,
@@ -114,13 +116,19 @@ function openAddKamar() {
 
 function openEditKamar(kamar) {
   editingKamarId.value = kamar.id
+  kamarNumberError.value = ''
   kamarForm.value = { ...kamar }
   showKamarModal.value = true
 }
 
 async function submitKamar() {
+  kamarNumberError.value = ''
   if (!kamarForm.value.nomor_kamar || !kamarForm.value.tipe_kamar_id) {
-    alert('Nomor kamar dan Tipe kamar wajib diisi!')
+    kamarNumberError.value = 'Nomor kamar dan tipe kamar wajib diisi.'
+    return
+  }
+  if (isDuplicateRoomNumber.value) {
+    kamarNumberError.value = `Nomor kamar ${kamarForm.value.nomor_kamar.trim()} sudah digunakan.`
     return
   }
 
@@ -141,23 +149,19 @@ async function submitKamar() {
     } else {
       const res = await api.post('/admin/kamar', payload)
       const savedData = extractObjectPayload(res.data)
-      kamarList.value.push(savedData.id ? savedData : { ...payload, id: Date.now() })
+      if (!savedData.id) throw new Error('Server tidak mengembalikan ID kamar yang tersimpan.')
+      kamarList.value.push(savedData)
     }
     showToast('Data kamar tersimpan.')
     showKamarModal.value = false
   } catch (error) {
     console.error('Gagal menyimpan kamar ke API:', error)
-    
-    // Fallback lokal kalau API belum tersambung
-    if (editingKamarId.value) {
-      const idx = kamarList.value.findIndex((k) => k.id === editingKamarId.value)
-      if (idx !== -1) kamarList.value[idx] = { ...payload, id: editingKamarId.value }
+    const numberError = error.response?.data?.errors?.nomor_kamar?.[0]
+    if (numberError) {
+      kamarNumberError.value = numberError
     } else {
-      const newId = kamarList.value.length ? Math.max(...kamarList.value.map((k) => k.id)) + 1 : 1
-      kamarList.value.push({ ...payload, id: newId })
+      showToast(error.response?.data?.message || error.message || 'Gagal menyimpan data kamar ke server.')
     }
-    showToast('Data kamar tersimpan (lokal).')
-    showKamarModal.value = false
   } finally {
     saving.value = false
   }
@@ -167,23 +171,23 @@ async function deleteKamar(id) {
   if (!confirm('Hapus kamar ini?')) return
   try {
     await api.delete(`/admin/kamar/${id}`)
+    kamarList.value = kamarList.value.filter((k) => k.id !== id)
+    showToast('Kamar dihapus.')
   } catch (error) {
-    console.warn('API delete kamar gagal, menghapus dari state lokal...')
+    showToast(error.response?.data?.message || 'Gagal menghapus kamar.')
   }
-  kamarList.value = kamarList.value.filter((k) => k.id !== id)
-  showToast('Kamar dihapus.')
 }
 
 async function updateKamarStatus(kamar, newStatus) {
   const prevStatus = kamar.status
+  kamar.status = newStatus
   try {
-    await api.put(`/admin/kamar/${kamar.id}`, { ...kamar, status: newStatus })
+    await api.patch(`/admin/kamar/${kamar.id}/status`, { status: newStatus })
     showToast(`Status kamar ${kamar.nomor_kamar} diubah ke ${kamarStatusLabel[newStatus]}`)
   } catch (error) {
     console.error('Gagal update status via API:', error)
-    // Rollback kalau API error
     kamar.status = prevStatus
-    showToast('Gagal mengubah status kamar di server.')
+    showToast(error.response?.data?.message || 'Gagal mengubah status kamar di server.')
   }
 }
 
@@ -198,17 +202,97 @@ const tipeForm = ref({
   kapasitas: 2,
   deskripsi: '',
 })
+const fotoCount = computed(() => Number(tipeForm.value.foto?.length || 0))
+const remainingPhotoSlots = computed(() => Math.max(0, 8 - fotoCount.value))
+const showLayananModal = ref(false)
+const editingLayananId = ref(null)
+const layananForm = ref({ nama: '', harga: 0, satuan: 'sekali_pakai' })
+const satuanLayanan = [
+  { value: 'per_tamu', label: 'Per tamu' },
+  { value: 'per_kamar', label: 'Per kamar' },
+  { value: 'per_hari', label: 'Per hari' },
+  { value: 'sekali_pakai', label: 'Sekali pakai' },
+]
+
+function openLayananModal(item = null) {
+  editingLayananId.value = item?.id || null
+  layananForm.value = item ? { ...item } : { nama: '', harga: 0, satuan: 'sekali_pakai' }
+  showLayananModal.value = true
+}
+
+async function submitLayanan() {
+  saving.value = true
+  try {
+    const payload = { ...layananForm.value, harga: Number(layananForm.value.harga) }
+    if (editingLayananId.value) await api.put(`/admin/layanan-tambahan/${editingLayananId.value}`, payload)
+    else await api.post('/admin/layanan-tambahan', payload)
+    await fetchData()
+    showLayananModal.value = false
+    showToast('Layanan tambahan tersimpan.')
+  } catch (error) {
+    const message = error.response?.data?.errors
+      ? Object.values(error.response.data.errors).flat().join(' ')
+      : error.response?.data?.message || 'Gagal menyimpan layanan tambahan.'
+    showToast(message)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function deleteLayanan(id) {
+  if (!confirm('Hapus layanan tambahan ini?')) return
+  try {
+    await api.delete(`/admin/layanan-tambahan/${id}`)
+    layananList.value = layananList.value.filter((item) => item.id !== id)
+    showToast('Layanan tambahan dihapus.')
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Gagal menghapus layanan tambahan.')
+  }
+}
 
 function openAddTipe() {
   editingTipeId.value = null
   tipeForm.value = { nama: '', harga_dasar: 0, kapasitas: 2, deskripsi: '' }
+  fotoFiles.value = []
+  fotoUploadError.value = ''
   showTipeModal.value = true
 }
 
 function openEditTipe(tipe) {
   editingTipeId.value = tipe.id
   tipeForm.value = { ...tipe }
+  fotoFiles.value = []
+  fotoUploadError.value = ''
   showTipeModal.value = true
+}
+
+function setFotoFiles(event) {
+  const selectedFiles = Array.from(event.target.files || [])
+  if (selectedFiles.length > remainingPhotoSlots.value) {
+    fotoFiles.value = []
+    fotoUploadError.value = `Tipe kamar ini hanya bisa ditambah ${remainingPhotoSlots.value} foto lagi.`
+    event.target.value = ''
+    return
+  }
+  fotoUploadError.value = ''
+  fotoFiles.value = selectedFiles
+}
+
+function fotoUrl(foto) {
+  const path = foto.path || foto.url || ''
+  return /^https?:\/\//i.test(path) ? path : `${API_ORIGIN}/storage/${path}`
+}
+
+async function hapusFoto(fotoId) {
+  try {
+    await api.delete(`/admin/tipe-kamar/${editingTipeId.value}/foto/${fotoId}`)
+    tipeForm.value.foto = (tipeForm.value.foto || []).filter((foto) => foto.id !== fotoId)
+    const tipe = tipeKamarList.value.find((item) => item.id === editingTipeId.value)
+    if (tipe) tipe.foto = tipeForm.value.foto
+    showToast('Foto kamar dihapus.')
+  } catch (error) {
+    showToast(error.response?.data?.message || 'Gagal menghapus foto kamar.')
+  }
 }
 
 async function submitTipe() {
@@ -225,6 +309,7 @@ async function submitTipe() {
   }
 
   try {
+    let savedTipeId = editingTipeId.value
     if (editingTipeId.value) {
       await api.put(`/admin/tipe-kamar/${editingTipeId.value}`, payload)
       const idx = tipeKamarList.value.findIndex((t) => t.id === editingTipeId.value)
@@ -232,21 +317,26 @@ async function submitTipe() {
     } else {
       const res = await api.post('/admin/tipe-kamar', payload)
       const savedData = extractObjectPayload(res.data)
-      tipeKamarList.value.push(savedData.id ? savedData : { ...payload, id: Date.now() })
+      savedTipeId = savedData.id
+      if (!savedTipeId) throw new Error('ID tipe kamar tidak ditemukan dari server.')
+      tipeKamarList.value.push({ ...savedData, foto: [] })
+    }
+    if (fotoFiles.value.length) {
+      const formData = new FormData()
+      fotoFiles.value.forEach((file) => formData.append('fotos[]', file))
+      const fotoResponse = await api.post(`/admin/tipe-kamar/${savedTipeId}/foto`, formData)
+      const updatedTipe = extractObjectPayload(fotoResponse.data)
+      const index = tipeKamarList.value.findIndex((item) => Number(item.id) === Number(savedTipeId))
+      if (index !== -1) tipeKamarList.value[index] = updatedTipe
     }
     showToast('Tipe kamar tersimpan.')
     showTipeModal.value = false
   } catch (error) {
     console.error('Gagal menyimpan tipe kamar ke API:', error)
-    if (editingTipeId.value) {
-      const idx = tipeKamarList.value.findIndex((t) => t.id === editingTipeId.value)
-      if (idx !== -1) tipeKamarList.value[idx] = { ...payload, id: editingTipeId.value }
-    } else {
-      const newId = tipeKamarList.value.length ? Math.max(...tipeKamarList.value.map((t) => t.id)) + 1 : 1
-      tipeKamarList.value.push({ ...payload, id: newId })
-    }
-    showToast('Tipe kamar tersimpan (lokal).')
-    showTipeModal.value = false
+    const message = error.response?.data?.errors
+      ? Object.values(error.response.data.errors).flat().join(' ')
+      : error.response?.data?.message || 'Gagal menyimpan tipe kamar ke server.'
+    showToast(message)
   } finally {
     saving.value = false
   }
@@ -261,11 +351,11 @@ async function deleteTipe(id) {
   if (!confirm('Hapus tipe kamar ini?')) return
   try {
     await api.delete(`/admin/tipe-kamar/${id}`)
+    tipeKamarList.value = tipeKamarList.value.filter((t) => t.id !== id)
+    showToast('Tipe kamar dihapus.')
   } catch (error) {
-    console.warn('API delete tipe kamar gagal, menghapus dari state lokal...')
+    showToast(error.response?.data?.message || 'Gagal menghapus tipe kamar.')
   }
-  tipeKamarList.value = tipeKamarList.value.filter((t) => t.id !== id)
-  showToast('Tipe kamar dihapus.')
 }
 
 const kamarStatusOptions = ['tersedia', 'terisi', 'perbaikan', 'dibersihkan']
@@ -295,6 +385,7 @@ const menuItems = [
   { key: 'pemesanan', label: 'Pemesanan', icon: '📋', to: '/admin/pemesanan' },
   { key: 'kamar', label: 'Kamar', icon: '🛏️', to: '/admin/kamar' },
   { key: 'tipe-kamar', label: 'Tipe Kamar', icon: '🏷️', to: '/admin/tipe-kamar' },
+  { key: 'promo', label: 'Promo', icon: '🏷️', to: '/admin/promo' },
   { key: 'pembayaran', label: 'Pembayaran', icon: '💳', to: '/admin/pembayaran' },
   { key: 'ulasan', label: 'Ulasan', icon: '⭐', to: '/admin/ulasan' },
   { key: 'pengguna', label: 'Pengguna', icon: '👥', to: '/admin/pengguna' },
@@ -356,10 +447,17 @@ const menuItems = [
         >
           Tipe Kamar
         </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'layanan' }" @click="activeTab = 'layanan'">
+          Add-on &amp; Layanan
+        </button>
       </div>
 
       <div v-if="loading" class="loading-state">
         Memuat data kamar...
+      </div>
+      <div v-else-if="loadError" class="loading-state error-state">
+        {{ loadError }}
+        <button class="btn-primary" @click="fetchData">Coba Lagi</button>
       </div>
 
       <template v-else>
@@ -399,8 +497,8 @@ const menuItems = [
                     <select
                       class="status-select"
                       :class="'room-' + k.status"
-                      v-model="k.status"
-                      @change="updateKamarStatus(k, k.status)"
+                      :value="k.status"
+                      @change="updateKamarStatus(k, $event.target.value)"
                     >
                       <option v-for="s in kamarStatusOptions" :key="s" :value="s">
                         {{ kamarStatusLabel[s] }}
@@ -435,16 +533,39 @@ const menuItems = [
                 <h3>{{ t.nama }}</h3>
                 <span class="tipe-price">{{ formatRupiah(t.harga_dasar) }}<small>/malam</small></span>
               </div>
+              <div v-if="t.foto?.length" class="tipe-photos">
+                <img v-for="foto in t.foto" :key="foto.id" :src="fotoUrl(foto)" :alt="t.nama" />
+              </div>
               <p class="tipe-desc">{{ t.deskripsi || '-' }}</p>
               <div class="tipe-meta">
                 <span>Maks {{ t.kapasitas }} tamu</span>
-                <span>{{ kamarList.filter(k => k.tipe_kamar_id === t.id).length }} unit kamar</span>
+                <span>{{ hitungKamarTipe(t.id) }} unit · {{ hitungKamarTipe(t.id, 'tersedia') }} tersedia</span>
               </div>
               <div class="tipe-actions">
                 <button class="btn-link" @click="openEditTipe(t)">Edit</button>
                 <button class="btn-link danger" @click="deleteTipe(t.id)">Hapus</button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'layanan'" class="panel">
+          <div class="panel-head">
+            <h2>Add-on &amp; Layanan</h2>
+            <button class="btn-primary" @click="openLayananModal()">+ Tambah Add-on</button>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Nama</th><th>Harga</th><th>Satuan</th><th>Aksi</th></tr></thead>
+              <tbody>
+                <tr v-for="item in layananList" :key="item.id">
+                  <td>{{ item.nama }}</td><td>{{ formatRupiah(item.harga) }}</td>
+                  <td>{{ satuanLayanan.find((satuan) => satuan.value === item.satuan)?.label || item.satuan }}</td>
+                  <td class="actions"><button class="btn-link" @click="openLayananModal(item)">Edit</button><button class="btn-link danger" @click="deleteLayanan(item.id)">Hapus</button></td>
+                </tr>
+                <tr v-if="!layananList.length"><td colspan="4" class="empty-row">Belum ada add-on. Tambahkan Extra Bed dan tetapkan tarifnya.</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -459,7 +580,18 @@ const menuItems = [
 
         <div class="fieldset">
           <label>Nomor Kamar</label>
-          <input v-model="kamarForm.nomor_kamar" type="text" placeholder="Contoh: 101" />
+          <input
+            v-model="kamarForm.nomor_kamar"
+            type="text"
+            maxlength="20"
+            placeholder="Contoh: 101"
+            :class="{ 'input-invalid': kamarNumberError || isDuplicateRoomNumber }"
+            @input="kamarNumberError = ''"
+          />
+          <small v-if="kamarNumberError" class="field-error">{{ kamarNumberError }}</small>
+          <small v-else-if="isDuplicateRoomNumber" class="field-error">
+            Nomor kamar ini sudah digunakan.
+          </small>
         </div>
 
         <div class="fieldset">
@@ -495,6 +627,16 @@ const menuItems = [
       </div>
     </div>
 
+    <div v-if="showLayananModal" class="modal-backdrop" @click.self="showLayananModal = false">
+      <form class="modal" @submit.prevent="submitLayanan">
+        <h3>{{ editingLayananId ? 'Edit Add-on' : 'Tambah Add-on' }}</h3>
+        <div class="fieldset"><label>Nama</label><input v-model="layananForm.nama" required maxlength="100" placeholder="Extra Bed" /></div>
+        <div class="fieldset"><label>Harga</label><input v-model.number="layananForm.harga" type="number" min="0" required /></div>
+        <div class="fieldset"><label>Satuan</label><select v-model="layananForm.satuan"><option v-for="satuan in satuanLayanan" :key="satuan.value" :value="satuan.value">{{ satuan.label }}</option></select></div>
+        <div class="modal-actions"><button type="button" class="btn-cancel" @click="showLayananModal = false">Batal</button><button class="btn-primary" :disabled="saving">{{ saving ? 'Menyimpan...' : 'Simpan' }}</button></div>
+      </form>
+    </div>
+
     <!-- MODAL TAMBAH/EDIT TIPE KAMAR -->
     <div v-if="showTipeModal" class="modal-backdrop" @click.self="showTipeModal = false">
       <div class="modal">
@@ -518,6 +660,22 @@ const menuItems = [
         <div class="fieldset">
           <label>Deskripsi</label>
           <textarea v-model="tipeForm.deskripsi" rows="3" placeholder="Deskripsi singkat tipe kamar"></textarea>
+        </div>
+
+        <div v-if="editingTipeId && tipeForm.foto?.length" class="fieldset">
+          <label>Foto Saat Ini</label>
+          <div class="photo-manager">
+            <div v-for="foto in tipeForm.foto" :key="foto.id" class="photo-item">
+              <img :src="fotoUrl(foto)" :alt="tipeForm.nama" />
+              <button type="button" class="btn-link danger" @click="hapusFoto(foto.id)">Hapus</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldset">
+          <label>Tambah Foto ({{ remainingPhotoSlots }} slot tersisa, JPG/PNG/WebP, 5 MB per file)</label>
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple :disabled="remainingPhotoSlots === 0" @change="setFotoFiles" />
+          <small v-if="fotoUploadError" class="field-error">{{ fotoUploadError }}</small>
         </div>
 
         <div class="modal-actions">
@@ -956,6 +1114,11 @@ tbody tr:hover {
   gap: 14px;
 }
 
+.tipe-photos, .photo-manager { display: flex; gap: 8px; overflow-x: auto; margin: 10px 0; }
+.tipe-photos img, .photo-item img { width: 76px; height: 58px; object-fit: cover; border-radius: 4px; }
+.photo-item { display: grid; gap: 4px; justify-items: center; }
+.error-state { display: grid; justify-items: center; gap: 12px; color: #b91c1c; }
+
 /* =========================================
    MODAL
    ========================================= */
@@ -1020,6 +1183,9 @@ tbody tr:hover {
   border-color: #0284c7;
   box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
 }
+
+.fieldset .input-invalid { border-color: #dc2626; }
+.fieldset .field-error { color: #b91c1c; font-size: 12px; }
 
 .modal-actions {
   display: flex;
@@ -1107,5 +1273,16 @@ tbody tr:hover {
   .main-content {
     padding: 20px;
   }
+}
+
+@media (max-width: 560px) {
+  .main-content { padding: 14px; }
+  .panel { padding: 14px; }
+  .panel-head, .panel-actions { align-items: stretch; width: 100%; }
+  .panel-actions { flex-direction: column; }
+  .panel-actions select, .panel-actions button { width: 100%; }
+  .modal { padding: 20px; }
+  .tipe-grid { grid-template-columns: minmax(0, 1fr); }
+  .tipe-meta { flex-wrap: wrap; gap: 6px; }
 }
 </style>

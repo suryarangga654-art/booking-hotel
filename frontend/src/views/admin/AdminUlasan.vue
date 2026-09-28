@@ -10,12 +10,14 @@ const loading = ref(true)
 const toast = ref('')
 const ulasanList = ref([])
 const filterRating = ref('semua')
+const loadError = ref('')
 
 const menuItems = [
   { key: 'dashboard', label: 'Dashboard', icon: '📊', to: '/admin' },
   { key: 'pemesanan', label: 'Pemesanan', icon: '📋', to: '/admin/pemesanan' },
   { key: 'kamar', label: 'Kamar', icon: '🛏️', to: '/admin/kamar' },
   { key: 'tipe-kamar', label: 'Tipe Kamar', icon: '🏷️', to: '/admin/tipe-kamar' },
+  { key: 'promo', label: 'Promo', icon: '🏷️', to: '/admin/promo' },
   { key: 'pembayaran', label: 'Pembayaran', icon: '💳', to: '/admin/pembayaran' },
   { key: 'ulasan', label: 'Ulasan', icon: '⭐', to: '/admin/ulasan' },
   { key: 'pengguna', label: 'Pengguna', icon: '👥', to: '/admin/pengguna' },
@@ -30,40 +32,23 @@ function logout() {
 
 async function fetchData() {
   loading.value = true
+  loadError.value = ''
   try {
     const res = await api.get('/admin/ulasan')
-    // Penanganan fleksibel untuk format response Laravel (res.data atau res.data.data)
     const raw = res.data?.data || res.data
-    ulasanList.value = Array.isArray(raw) ? raw : []
+    ulasanList.value = (Array.isArray(raw) ? raw : []).map((item) => ({
+      ...item,
+      rating: Number(item.penilaian ?? item.rating ?? 0),
+      nama_tamu: item.user?.name || 'Tamu',
+      tipe_kamar: item.pemesanan?.detail_pemesanan?.[0]?.kamar?.tipe_kamar?.nama || 'Kamar',
+      tampil: true,
+    }))
   } catch (err) {
-    console.error('Gagal mengambil data ulasan dari BE, memuat fallback dummy:', err)
-    loadDummyData()
+    console.error('Gagal mengambil data ulasan dari backend:', err)
+    loadError.value = err.response?.data?.message || 'Data ulasan gagal dimuat.'
   } finally {
     loading.value = false
   }
-}
-
-function loadDummyData() {
-  ulasanList.value = [
-    {
-      id: 1,
-      nama_tamu: 'Rian Prasetya',
-      tipe_kamar: 'Suite Pesisir',
-      rating: 5,
-      komentar: 'Pelayanannya sangat ramah, pemandangan luar biasa dari balkon!',
-      tanggal: '2026-09-10',
-      tampil: true
-    },
-    {
-      id: 2,
-      nama_tamu: 'Dewi Lestari',
-      tipe_kamar: 'Kamar Rimba',
-      rating: 4,
-      komentar: 'Kamar bersih dan asri, WiFi tergolong stabil.',
-      tanggal: '2026-09-08',
-      tampil: true
-    }
-  ]
 }
 
 onMounted(fetchData)
@@ -77,19 +62,6 @@ const filteredUlasan = computed(() => {
   if (filterRating.value === 'semua') return ulasanList.value
   return ulasanList.value.filter((u) => Number(u.rating) === Number(filterRating.value))
 })
-
-async function toggleTampil(u) {
-  const statusAwal = u.tampil
-  u.tampil = !u.tampil // Optimistic update UI
-
-  try {
-    await api.put(`/admin/ulasan/${u.id}`, { tampil: u.tampil })
-    showToast(u.tampil ? 'Ulasan ditampilkan.' : 'Ulasan disembunyikan.')
-  } catch (e) {
-    u.tampil = statusAwal // Rollback jika BE gagal/error
-    showToast('Gagal mengubah status ulasan.')
-  }
-}
 
 async function deleteUlasan(id) {
   if (!confirm('Hapus ulasan ini secara permanen?')) return
@@ -137,6 +109,7 @@ async function deleteUlasan(id) {
       </header>
 
       <div v-if="loading" class="loading-state">Memuat ulasan...</div>
+      <div v-else-if="loadError" class="loading-state">{{ loadError }} <button @click="fetchData">Coba Lagi</button></div>
 
       <template v-else>
         <section class="panel">
@@ -166,9 +139,6 @@ async function deleteUlasan(id) {
               <div class="ulasan-footer">
                 <span class="date">{{ u.tanggal || u.created_at?.split('T')[0] }}</span>
                 <div class="actions">
-                  <button class="btn-toggle" @click="toggleTampil(u)">
-                    {{ u.tampil ? '👁️ Sembunyikan' : '🙈 Tampilkan' }}
-                  </button>
                   <button class="btn-delete" @click="deleteUlasan(u.id)">Hapus</button>
                 </div>
               </div>

@@ -29,29 +29,35 @@ const tipeKamarList = ref([])
 // ============================================
 function normalizeStatPayload(payload) {
   const source = payload?.data ?? payload ?? {}
+  const summary = source.ringkasan ?? source
+  const rooms = source.status_kamar ?? source
   return {
-    totalPemesananHariIni: Number(source.totalPemesananHariIni ?? source.total_pemesanan_hari_ini ?? 0),
-    pendapatanBulanIni: Number(source.pendapatanBulanIni ?? source.pendapatan_bulan_ini ?? 0),
-    kamarTersedia: Number(source.kamarTersedia ?? source.kamar_tersedia ?? 0),
-    totalKamar: Number(source.totalKamar ?? source.total_kamar ?? 0),
-    tamuAktif: Number(source.tamuAktif ?? source.tamu_aktif ?? 0),
+    totalPemesananHariIni: Number(summary.totalPemesananHariIni ?? summary.total_pemesanan_hari_ini ?? summary.check_in_hari_ini ?? 0),
+    pendapatanBulanIni: Number(summary.pendapatanBulanIni ?? summary.pendapatan_bulan_ini ?? 0),
+    kamarTersedia: Number(rooms.kamarTersedia ?? rooms.kamar_tersedia ?? rooms.tersedia ?? 0),
+    totalKamar: Number(rooms.totalKamar ?? rooms.total_kamar ?? rooms.total ?? 0),
+    tamuAktif: Number(summary.tamuAktif ?? summary.tamu_aktif ?? summary.total_tamu ?? 0),
   }
 }
 
 function normalizePemesananPayload(payload) {
   const list = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : []
-  return list.map((item) => ({
-    ...item,
-    id: item.id ?? item.pemesanan_id,
-    kode_pemesanan: item.kode_pemesanan ?? item.kode ?? 'N/A',
-    nama_tamu: item.nama_tamu ?? item.user?.name ?? item.guest_name ?? 'Tamu',
-    tipe_kamar: item.tipe_kamar ?? item.kamar?.nama ?? item.room_name ?? item.tipe_kamar_name ?? '-',
-    tanggal_check_in: item.tanggal_check_in ?? item.check_in ?? item.checkIn ?? '',
-    tanggal_check_out: item.tanggal_check_out ?? item.check_out ?? item.checkOut ?? '',
-    jumlah_total: Number(item.jumlah_total ?? item.total ?? item.amount ?? 0),
-    status_pemesanan: item.status_pemesanan ?? item.status ?? 'menunggu',
-    status_pembayaran: item.status_pembayaran ?? item.payment_status ?? 'belum_dibayar',
-  }))
+  return list.map((item) => {
+    const detail = item.detail_pemesanan?.[0] || {}
+    const room = detail.kamar || {}
+    return {
+      ...item,
+      id: item.id ?? item.pemesanan_id,
+      kode_pemesanan: item.kode_pemesanan ?? item.kode ?? 'N/A',
+      nama_tamu: item.nama_tamu ?? item.user?.name ?? item.guest_name ?? 'Tamu',
+      tipe_kamar: item.tipe_kamar ?? room.tipe_kamar?.nama ?? room.nama ?? item.room_name ?? item.tipe_kamar_name ?? '-',
+      tanggal_check_in: item.tanggal_check_in ?? detail.tanggal_check_in ?? item.check_in ?? item.checkIn ?? '',
+      tanggal_check_out: item.tanggal_check_out ?? detail.tanggal_check_out ?? item.check_out ?? item.checkOut ?? '',
+      jumlah_total: Number(item.jumlah_total ?? item.total ?? item.amount ?? 0),
+      status_pemesanan: item.status_pemesanan ?? item.status ?? 'menunggu',
+      status_pembayaran: item.status_pembayaran ?? item.payment_status ?? 'belum_dibayar',
+    }
+  })
 }
 
 function normalizeListPayload(payload) {
@@ -69,7 +75,7 @@ async function fetchDashboardData() {
 
   try {
     const results = await Promise.allSettled([
-      api.get('/admin/stats'),
+      api.get('/admin/dashboard'),
       api.get('/admin/pemesanan?limit=8'),
       api.get('/admin/kamar'),
       api.get('/admin/tipe-kamar'),
@@ -96,7 +102,7 @@ async function fetchDashboardData() {
 
     if (failedResults.length) {
       const endpointNames = [
-        '/admin/stats',
+        '/admin/dashboard',
         '/admin/pemesanan?limit=8',
         '/admin/kamar',
         '/admin/tipe-kamar',
@@ -191,6 +197,7 @@ const menuItems = [
   { key: 'pemesanan', label: 'Pemesanan', icon: '📋', to: '/admin/pemesanan' },
   { key: 'kamar', label: 'Kamar', icon: '🛏️', to: '/admin/kamar' },
   { key: 'tipe-kamar', label: 'Tipe Kamar', icon: '🏷️', to: '/admin/tipe-kamar' },
+  { key: 'promo', label: 'Promo', icon: '🏷️', to: '/admin/promo' },
   { key: 'pembayaran', label: 'Pembayaran', icon: '💳', to: '/admin/pembayaran' },
   { key: 'ulasan', label: 'Ulasan', icon: '⭐', to: '/admin/ulasan' },
   { key: 'pengguna', label: 'Pengguna', icon: '👥', to: '/admin/pengguna' },
@@ -235,6 +242,10 @@ const menuItems = [
           <p>Ringkasan operasional Velora Resort hari ini</p>
         </div>
         <div class="admin-profile">
+          <router-link to="/rooms" class="users-button">
+            <span aria-hidden="true">🛏️</span>
+            <span>Lihat Kamar &amp; Booking</span>
+          </router-link>
           <span class="avatar-mark"></span>
           <span>Admin</span>
         </div>
@@ -521,6 +532,22 @@ const menuItems = [
   align-items: center;
   gap: 10px;
 
+
+.users-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.users-button:hover { background: #f1f5f9; }
   padding: 8px 14px;
 
   background: #ffffff;
@@ -873,5 +900,11 @@ tbody tr:hover {
     margin-left: 0;
     width: 100%;
   }
+}
+
+@media (max-width: 560px) {
+  .topbar { align-items: flex-start; }
+  .admin-profile { flex-wrap: wrap; justify-content: flex-end; }
+  .users-button { padding: 8px 10px; }
 }
 </style>

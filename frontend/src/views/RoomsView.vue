@@ -1,39 +1,32 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { store, addBooking } from '../store/store'
+import { store } from '../store/store'
+import api from '../utils/api'
+import { normalizeRoomCatalog } from '../utils/rooms'
 
 const route = useRoute()
 const router = useRouter()
 
-const showModal = ref(false)
-const activeRoom = ref(null)
-const guestName = ref('')
-const checkIn = ref('')
-const checkOut = ref('')
 const toast = ref('')
+const loading = ref(true)
+
+store.rooms = []
+
+onMounted(async () => {
+  try {
+    const response = await api.get('/tipe-kamar')
+    store.rooms = normalizeRoomCatalog(response.data, api.defaults.baseURL)
+  } catch (error) {
+    console.error('Gagal memuat katalog kamar:', error)
+    store.rooms = []
+  } finally {
+    loading.value = false
+  }
+})
 
 function openBooking(room) {
-  if (!store.user) {
-    router.push('/login')
-    return
-  }
-  activeRoom.value = room
-  guestName.value = store.user.name
-  showModal.value = true
-}
-
-function confirmBooking() {
-  if (!checkIn.value || !checkOut.value || !guestName.value) return
-  addBooking({
-    roomId: activeRoom.value.id,
-    guestName: guestName.value,
-    checkIn: checkIn.value,
-    checkOut: checkOut.value,
-  })
-  showModal.value = false
-  toast.value = 'Pemesanan terkirim. Menunggu konfirmasi tim kami.'
-  setTimeout(() => (toast.value = ''), 3200)
+  router.push(`/booking/${room.id}`)
 }
 
 function formatPrice(n) {
@@ -52,9 +45,9 @@ const searchTerm = route.query.search
   ? String(route.query.search).toLowerCase()
   : ''
 
-const filteredRooms = searchTerm
-  ? store.rooms.filter((r) => r.name.toLowerCase().includes(searchTerm))
-  : store.rooms
+const filteredRooms = computed(() => searchTerm
+  ? store.rooms.filter((room) => room.name.toLowerCase().includes(searchTerm))
+  : store.rooms)
 </script>
 
 <template>
@@ -69,48 +62,27 @@ const filteredRooms = searchTerm
       <div class="rooms">
         <div class="room-card" v-for="room in filteredRooms" :key="room.id">
           <div class="room-art">
-            <img :src="roomPhotos[room.id]" :alt="room.name" />
+            <img :src="room.photo || roomPhotos[room.id] || '/salah.jpg'" :alt="room.name" />
           </div>
           <h3>{{ room.name }}</h3>
           <p class="desc">{{ room.desc }}</p>
-          <p class="meta">Maks {{ room.capacity }} tamu</p>
+          <p class="meta">Maks {{ room.capacity }} tamu · {{ room.availableCount }} unit tersedia</p>
           <div class="price-row">
             <div class="price">
               Rp{{ formatPrice(room.price) }}<small> / malam</small>
             </div>
-            <button class="book-btn" @click="openBooking(room)">Pesan Kamar</button>
+            <button class="book-btn" :disabled="room.status !== 'tersedia'" @click="openBooking(room)">
+              {{ room.status === 'tersedia' ? 'Pesan Kamar' : 'Tidak Tersedia' }}
+            </button>
           </div>
         </div>
       </div>
+      <div v-if="loading" class="empty-state">Memuat kamar...</div>
 
       <div v-if="filteredRooms.length === 0" class="empty-state">
         Tidak ada kamar yang cocok dengan pencarian kamu.
       </div>
     </section>
-
-    <!-- MODAL PEMESANAN -->
-    <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
-      <div class="modal">
-        <h3>Pesan {{ activeRoom.name }}</h3>
-        <p class="sub">Rp{{ formatPrice(activeRoom.price) }} / malam</p>
-        <div class="fieldset">
-          <label>Nama Tamu</label>
-          <input v-model="guestName" type="text" />
-        </div>
-        <div class="fieldset">
-          <label>Check-in</label>
-          <input v-model="checkIn" type="date" />
-        </div>
-        <div class="fieldset">
-          <label>Check-out</label>
-          <input v-model="checkOut" type="date" />
-        </div>
-        <div class="modal-actions">
-          <button class="btn-cancel" @click="showModal = false">Batal</button>
-          <button class="primary" @click="confirmBooking">Konfirmasi</button>
-        </div>
-      </div>
-    </div>
 
     <!-- TOAST NOTIFIKASI -->
     <div v-if="toast" class="toast">{{ toast }}</div>

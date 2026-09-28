@@ -16,6 +16,7 @@ import AdminTipeKamar from '../views/admin/AdminTipeKamar.vue'
 import AdminPembayaran from '../views/admin/AdminPembayaran.vue'
 import AdminUlasan from '../views/admin/AdminUlasan.vue'
 import AdminPengguna from '../views/admin/AdminPengguna.vue'
+import AdminPromo from '../views/admin/AdminPromo.vue'
 
 const routes = [
   /* =========================================================
@@ -110,6 +111,12 @@ const routes = [
     name: 'admin-ulasan',
     component: AdminUlasan,
     meta: { requiresAuth: true, allowedRoles: ['admin', 'resepsionis'], hideNavbar: true },
+  },
+  {
+    path: '/admin/promo',
+    name: 'admin-promo',
+    component: AdminPromo,
+    meta: { requiresAuth: true, allowedRoles: ['admin'], hideNavbar: true },
   },
   {
     path: '/admin/pengguna',
