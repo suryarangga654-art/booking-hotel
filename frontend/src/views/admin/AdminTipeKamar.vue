@@ -170,6 +170,7 @@ const menuItems = [
   { key: 'pemesanan', label: 'Pemesanan', icon: '📋', to: '/admin/pemesanan' },
   { key: 'kamar', label: 'Kamar', icon: '🛏️', to: '/admin/kamar' },
   { key: 'tipe-kamar', label: 'Tipe Kamar', icon: '🏷️', to: '/admin/tipe-kamar' },
+  { key: 'promo', label: 'Promo', icon: '🏷️', to: '/admin/promo' },
   { key: 'pembayaran', label: 'Pembayaran', icon: '💳', to: '/admin/pembayaran' },
   { key: 'ulasan', label: 'Ulasan', icon: '⭐', to: '/admin/ulasan' },
   { key: 'pengguna', label: 'Pengguna', icon: '👥', to: '/admin/pengguna' },
@@ -190,7 +191,7 @@ const menuItems = [
           :key="item.key"
           :to="item.to"
           class="nav-item"
-          :class="{ active: route.path === item.to || route.path.startsWith(item.to + '/') }"
+          :class="{ active: route.path === item.to }"
         >
           <span class="nav-icon">{{ item.icon }}</span>
           <span>{{ item.label }}</span>
@@ -296,14 +297,17 @@ const menuItems = [
 <style scoped>
 * { box-sizing: border-box; }
 .admin-layout { display: flex; min-height: 100vh; background: #f8fafc; font-family: system-ui, sans-serif; }
-.sidebar { width: 250px; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; padding: 28px 18px; position: sticky; top: 0; height: 100vh; }
+
+.sidebar { width: 250px; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; padding: 28px 18px; position: sticky; top: 0; height: 100vh; flex-shrink: 0; }
+
 .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 28px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); font-family: Georgia, serif; font-size: 19px; font-weight: 700; }
 .logo-mark { width: 24px; height: 24px; border-radius: 50%; background: conic-gradient(from 200deg, #0284c7, #f8fafc, #0284c7); }
 .sidebar-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 8px; color: #cbd5e1; text-decoration: none; font-size: 14px; font-weight: 500; }
-.nav-item.active { background: #0284c7; color: #ffffff; }
-.logout-btn { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: none; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; color: #f87171; font-weight: 600; cursor: pointer; }
-.main-content { flex: 1; padding: 32px 40px; }
+.nav-item.active, .nav-item:hover { background: #0284c7; color: #fff; }
+.logout-btn { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: none; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; color: #f87171; cursor: pointer; }
+
+.main-content { flex: 1; padding: 32px 40px; min-width: 0; }
 .topbar h1 { margin: 0 0 4px; color: #0f172a; font-family: Georgia, serif; font-size: 26px; }
 .topbar p { margin: 0 0 24px; color: #64748b; font-size: 14px; }
 .loading-state { padding: 60px 0; text-align: center; color: #64748b; }

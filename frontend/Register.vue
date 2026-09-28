@@ -21,8 +21,8 @@ async function submit() {
     return
   }
 
-  if (password.value.length < 4) {
-    error.value = 'Kata sandi minimal 4 karakter.'
+  if (password.value.length < 8) {
+    error.value = 'Kata sandi minimal 8 karakter.'
     return
   }
 
@@ -108,7 +108,7 @@ async function submit() {
 
         <div class="form-group">
           <label for="password">Kata sandi</label>
-          <input id="password" v-model="password" type="password" placeholder="Minimal 4 karakter" autocomplete="new-password" required />
+          <input id="password" v-model="password" type="password" placeholder="Minimal 8 karakter" minlength="8" autocomplete="new-password" required />
         </div>
 
         <div class="form-group">

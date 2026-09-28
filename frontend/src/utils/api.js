@@ -1,12 +1,13 @@
 import axios from 'axios'
 
+const apiBaseURL = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8001/api`
+
 const api = axios.create({
-  baseURL: 'http://10.225.200.148:8000/api',
+  baseURL: apiBaseURL,
   headers: {
     'Accept': 'application/json'
   }
 })
-
 // Interceptor Request: Menyisipkan Token
 api.interceptors.request.use(
   (config) => {

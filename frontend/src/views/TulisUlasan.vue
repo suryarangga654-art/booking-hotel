@@ -25,7 +25,7 @@ if (!token && !store.user) {
 async function loadBookings() {
   try {
     // Ambil daftar pemesanan milik tamu yang bisa diulas
-    const res = await api.get('/tamu/pemesanan')
+    const res = await api.get('/my-bookings')
     const data = res.data?.data || res.data
     bookingsOptions.value = Array.isArray(data) ? data : []
   } catch (e) {
@@ -58,16 +58,17 @@ async function submitUlasan() {
 
   loading.value = true
   try {
-    // Endpoint disesuaikan ke /tamu/ulasan & key payload sesuai field DB (penilaian, pemesanan_id)
-    await api.post('/tamu/ulasan', {
+    await api.post('/ulasan', {
       pemesanan_id: pemesananId.value,
       penilaian: rating.value,
       komentar: komentar.value,
     })
     submitted.value = true
   } catch (error) {
-    errorMsg.value =
-      error.response?.data?.message || 'Gagal mengirim ulasan. Coba lagi nanti.'
+    const errors = error.response?.data?.errors
+    errorMsg.value = errors
+      ? Object.values(errors).flat().join(', ')
+      : error.response?.data?.message || 'Gagal mengirim ulasan. Coba lagi nanti.'
   } finally {
     loading.value = false
   }
@@ -106,7 +107,7 @@ function backToHome() {
           <select v-model="pemesananId">
             <option value="" disabled>Pilih riwayat pemesanan kamu</option>
             <option v-for="booking in bookingsOptions" :key="booking.id" :value="booking.id">
-              Pemesanan #{{ booking.id }} - {{ booking.kamar?.nama || 'Kamar' }}
+              Pemesanan #{{ booking.id }} - {{ booking.detail_pemesanan?.[0]?.kamar?.tipe_kamar?.nama || 'Kamar' }}
             </option>
           </select>
         </div>

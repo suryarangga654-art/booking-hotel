@@ -44,7 +44,7 @@ function closeDropdown() {
     <router-link to="/" class="brand">
       <div class="auth-logo">
         <span class="logo-mark"></span>
-        <span class="brand-name">AUREA</span>
+        <span class="brand-name">VELORA</span>
       </div>
     </router-link>
 
@@ -92,12 +92,6 @@ function closeDropdown() {
 
       <!-- TAMU SUDAH LOGIN -->
       <template v-else>
-
-        <!-- NOTIFICATIONS -->
-        <router-link to="/notifications" class="notification-icon">
-          <span class="icon">🔔</span>
-          <span class="badge" v-if="unreadCount > 0">{{ unreadCount }}</span>
-        </router-link>
 
         <!-- USER DROPDOWN -->
         <div class="user-menu" @click.stop>

@@ -12,11 +12,11 @@ const errorMsg = ref('')
 const loading = ref(false)
 
 function getRole(user, responseData, responseBody) {
-  const roleValue = user?.role || user?.role_name || user?.nama_role ||
+  const roleValue = user?.role || user?.peran || user?.role_name || user?.nama_role ||
     user?.jabatan || user?.jenis_user ||
-    responseData?.role || responseData?.role_name || responseData?.nama_role ||
+    responseData?.role || responseData?.peran || responseData?.role_name || responseData?.nama_role ||
     responseData?.jabatan || responseData?.jenis_user ||
-    responseBody?.role || responseBody?.role_name || responseBody?.nama_role
+    responseBody?.role || responseBody?.peran || responseBody?.role_name || responseBody?.nama_role
 
   if (typeof roleValue === 'object') {
     return String(roleValue.name || roleValue.nama || roleValue.slug || roleValue.role || '').trim().toLowerCase()
@@ -49,16 +49,20 @@ const login = async () => {
     ).replace(/^Bearer\s+/i, '').trim()
 
     if (accessToken) {
-      // 1. Ambil data user dari respon API
-      const rawUser = responseData.user || responseBody.user || {
+      // 1. Ambil data user dari respon API.
+      // Struktur backend: { status, message, token, data: { id, name, email, ... } }
+      // artinya `data` ITU SENDIRI adalah objek user (bukan dibungkus lagi { user: {...} }),
+      // jadi prioritaskan responseBody.data / responseData langsung sebelum fallback lain.
+      const rawUser = responseBody.data?.user || responseBody.user || responseData || {
         email: email.value,
         name: email.value.split('@')[0],
         role: responseData.role || responseBody.role || 'tamu'
       }
       const role = getRole(rawUser, responseData, responseBody)
-      
+
       const user = {
         ...rawUser,
+        id: rawUser.id ?? rawUser.pengguna_id ?? rawUser.user_id ?? null,
         name: rawUser.nama || rawUser.name || email.value.split('@')[0],
         role: role
       }
@@ -102,7 +106,7 @@ const login = async () => {
         <h1>Welcome Back</h1>
 
         <p>
-          Masuk ke akun Velora Hotel Anda
+          Masuk ke akun Velora Resort Anda
         </p>
       </div>
 

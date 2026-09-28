@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { store, roomStatusInfo, addBooking } from '../store/store'
+import { store, roomStatusInfo } from '../store/store'
 import api from '../utils/api'
 
 const route = useRoute()
@@ -13,8 +13,16 @@ const checkOut = ref('')
 const paymentMethod = ref('transfer_bank')
 const paymentProof = ref(null)
 const paymentPreview = ref('')
+const layananList = ref([])
+const layananIds = ref([])
+const layananJumlah = ref({})
+const promoCode = ref('')
+const appliedPromo = ref(null)
+const promoFeedback = ref('')
+const promoDiscount = ref(0)
 const toast = ref('')
 const submitted = ref(false)
+const saving = ref(false)
 
 const roomRules = [
   'Dilarang merokok di dalam kamar maupun area balkon kamar.',
@@ -58,6 +66,13 @@ onMounted(() => {
   if (store.user) {
     guestName.value = store.user.name || store.user.nama || ''
   }
+
+  api.get('/layanan-tambahan')
+    .then((response) => {
+      const items = response.data?.data ?? response.data
+      layananList.value = Array.isArray(items) ? items : []
+    })
+    .catch((error) => console.error('Gagal memuat layanan tambahan:', error))
 })
 
 function formatPrice(n) {
@@ -72,10 +87,40 @@ const jumlahMalam = computed(() => {
   return diff > 0 ? diff : 0
 })
 
-const totalHarga = computed(() => {
+const subtotalHarga = computed(() => {
   if (!room.value || jumlahMalam.value <= 0) return 0
-  return room.value.price * jumlahMalam.value
+  const totalLayanan = layananList.value
+    .filter((item) => layananIds.value.includes(item.id))
+    .reduce((total, item) => {
+      const jumlah = Number(layananJumlah.value[item.id] || 1)
+      const pengaliMalam = item.satuan === 'per_hari' ? jumlahMalam.value : 1
+      return total + Number(item.harga) * jumlah * pengaliMalam
+    }, 0)
+  return room.value.price * jumlahMalam.value + totalLayanan
 })
+
+const totalHarga = computed(() => Math.max(0, subtotalHarga.value - promoDiscount.value))
+
+async function applyPromo() {
+  promoFeedback.value = ''
+  appliedPromo.value = null
+  promoDiscount.value = 0
+  if (!promoCode.value.trim() || subtotalHarga.value <= 0) {
+    promoFeedback.value = 'Isi kode promo setelah memilih tanggal menginap.'
+    return
+  }
+  try {
+    const response = await api.post('/promo/validate', {
+      kode: promoCode.value.trim(),
+      subtotal: room.value.price * jumlahMalam.value,
+    })
+    appliedPromo.value = response.data?.data
+    promoDiscount.value = Number(response.data?.discount || 0)
+    promoFeedback.value = `Promo ${appliedPromo.value.kode} diterapkan.`
+  } catch (error) {
+    promoFeedback.value = error.response?.data?.message || 'Kode promo tidak dapat digunakan.'
+  }
+}
 
 function handlePaymentProofUpload(event) {
   const file = event.target.files && event.target.files[0]
@@ -105,6 +150,7 @@ function handlePaymentProofUpload(event) {
 }
 
 async function confirmBooking() {
+  if (saving.value) return
   if (!checkIn.value || !checkOut.value || !guestName.value) {
     toast.value = 'Silakan lengkapi data pemesanan.'
     setTimeout(() => (toast.value = ''), 3000)
@@ -123,29 +169,23 @@ async function confirmBooking() {
     return
   }
 
+  saving.value = true
   try {
     const payload = new FormData()
     
     // Data Utama Pemesanan
     payload.append('kamar_id', Number(room.value.id))
-    payload.append('nama_tamu', guestName.value)
     payload.append('tanggal_check_in', checkIn.value)
     payload.append('tanggal_check_out', checkOut.value)
     payload.append('metode_pembayaran', paymentMethod.value)
     payload.append('bukti_transfer', paymentProof.value)
-    payload.append('jumlah_total', Math.round(Number(totalHarga.value)))
+    if (appliedPromo.value) payload.append('kode_promo', appliedPromo.value.kode)
+    layananIds.value.forEach((id, index) => {
+      payload.append(`layanan[${index}][id]`, id)
+      payload.append(`layanan[${index}][jumlah]`, Number(layananJumlah.value[id] || 1))
+    })
 
-    // --- PERBAIKAN: Mengirimkan harga per malam & jumlah harga ---
-    payload.append('harga_per_malam', Math.round(Number(room.value.price)))
-    payload.append('jumlah_harga', Math.round(Number(totalHarga.value)))
-
-    const res = await api.post('/tamu/pemesanan', payload)
-
-    const newBookingData = res.data?.data || res.data?.booking || res.data
-
-    if (typeof addBooking === 'function') {
-      addBooking(newBookingData)
-    }
+    await api.post('/pemesanan', payload)
 
     submitted.value = true
   } catch (error) {
@@ -169,6 +209,8 @@ async function confirmBooking() {
     }
 
     setTimeout(() => (toast.value = ''), 5000)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -202,7 +244,7 @@ function backToHome() {
       <div v-else class="booking-grid">
         <!-- INFO KAMAR -->
         <div class="room-info">
-          <img :src="roomPhotos[room.id] || '/aurea.jpg'" :alt="room.name" class="room-photo" />
+          <img :src="room.photo || roomPhotos[room.id] || '/aurea.jpg'" :alt="room.name" class="room-photo" />
           <span class="status-badge" :class="'status-' + room.status">
             {{ roomStatusInfo[room.status]?.label || room.status }}
           </span>
@@ -250,6 +292,30 @@ function backToHome() {
             </div>
           </div>
 
+          <div v-if="layananList.length" class="addons-box">
+            <h3>Layanan Tambahan</h3>
+            <label v-for="item in layananList" :key="item.id" class="addon-option">
+              <input v-model="layananIds" type="checkbox" :value="item.id" />
+              <span>{{ item.nama }} · Rp{{ formatPrice(item.harga) }}/{{ item.satuan }}</span>
+              <input
+                v-if="layananIds.includes(item.id)"
+                v-model.number="layananJumlah[item.id]"
+                type="number"
+                min="1"
+                aria-label="Jumlah layanan"
+              />
+            </label>
+          </div>
+
+          <div class="promo-box">
+            <label for="promo-code">Kode Promo</label>
+            <div class="promo-row">
+              <input id="promo-code" v-model="promoCode" type="text" maxlength="40" placeholder="Masukkan kode" @input="appliedPromo = null; promoDiscount = 0; promoFeedback = ''" />
+              <button type="button" class="btn-secondary" @click="applyPromo">Pakai</button>
+            </div>
+            <small v-if="promoFeedback" :class="{ 'promo-error': !appliedPromo }">{{ promoFeedback }}</small>
+          </div>
+
           <div class="payment-box">
             <h3>Metode Pembayaran</h3>
             <div class="payment-row">
@@ -282,16 +348,21 @@ function backToHome() {
           <div v-if="jumlahMalam > 0" class="price-summary">
             <div class="price-row">
               <span>Rp{{ formatPrice(room.price) }} x {{ jumlahMalam }} malam</span>
-              <span>Rp{{ formatPrice(totalHarga) }}</span>
+              <span>Rp{{ formatPrice(room.price * jumlahMalam) }}</span>
             </div>
+            <div v-for="item in layananList.filter((service) => layananIds.includes(service.id))" :key="item.id" class="price-row">
+              <span>{{ item.nama }} x {{ layananJumlah[item.id] || 1 }}</span>
+              <span>Rp{{ formatPrice(Number(item.harga) * Number(layananJumlah[item.id] || 1) * (item.satuan === 'per_hari' ? jumlahMalam : 1)) }}</span>
+            </div>
+            <div v-if="promoDiscount" class="price-row discount-row"><span>Diskon promo</span><span>-Rp{{ formatPrice(promoDiscount) }}</span></div>
             <div class="price-row total">
               <span>Total</span>
               <span>Rp{{ formatPrice(totalHarga) }}</span>
             </div>
           </div>
 
-          <button class="btn-primary w-full" @click="confirmBooking">
-            Konfirmasi Pemesanan & Kirim Bukti
+          <button class="btn-primary w-full" :disabled="saving" @click="confirmBooking">
+            {{ saving ? 'Mengirim...' : 'Konfirmasi Pemesanan & Kirim Bukti' }}
           </button>
         </div>
       </div>
@@ -511,6 +582,18 @@ function backToHome() {
   border-color: #0284c7;
   box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
 }
+
+.addons-box, .promo-box { margin: 18px 0; padding: 14px; border: 1px solid #e2e8f0; background: #f8fafc; }
+.addons-box h3 { margin: 0 0 10px; font-size: 0.95rem; }
+.addon-option { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 7px 0; font-size: 0.82rem; }
+.addon-option input[type='number'] { width: 64px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.promo-box > label { display: block; margin-bottom: 7px; font-size: 0.8rem; font-weight: 600; }
+.promo-row { display: flex; gap: 8px; }
+.promo-row input { min-width: 0; flex: 1; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 4px; }
+.btn-secondary { padding: 8px 12px; border: 1px solid #21574a; border-radius: 4px; background: #fff; color: #21574a; font-weight: 600; }
+.promo-box small { display: block; margin-top: 6px; color: #216b4b; }
+.promo-box small.promo-error { color: #b42318; }
+.discount-row { color: #216b4b; }
 
 .payment-box {
   margin: 20px 0;

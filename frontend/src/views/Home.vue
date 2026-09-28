@@ -3,10 +3,14 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { store } from '../store/store'
 import api from '../utils/api'
+import { normalizeRoomCatalog } from '../utils/rooms'
 
 const router = useRouter()
 const reviews = ref([])
 const loadingReviews = ref(true)
+const loadingRooms = ref(true)
+const roomError = ref('')
+store.rooms = []
 
 // URL Video Stok Hotel/Resort Luxury
 const resortVideoUrl = '/videos/resort.mp4'
@@ -33,7 +37,22 @@ async function fetchReviews() {
   }
 }
 
+async function fetchRooms() {
+  loadingRooms.value = true
+  roomError.value = ''
+  try {
+    const response = await api.get('/tipe-kamar')
+    store.rooms = normalizeRoomCatalog(response.data, api.defaults.baseURL)
+  } catch (error) {
+    roomError.value = error.response?.data?.message || 'Kamar gagal dimuat dari server.'
+    store.rooms = []
+  } finally {
+    loadingRooms.value = false
+  }
+}
+
 onMounted(fetchReviews)
+onMounted(fetchRooms)
 
 function goToBooking(room) {
   router.push(`/booking/${room.id}`)
@@ -81,38 +100,18 @@ const roomPhotos = {
         <!-- Kolom Kiri: Teks -->
         <div class="hero-text-col">
           <span class="badge-tag">LUXURY TROPICAL RESORT</span>
-          <h1 class="hero-title">AUREA THE RESORT</h1>
+          <h1 class="hero-title">VELORA RESORT</h1>
           <p class="hero-subtitle">
             Nikmati keindahan Uluwatu, Bali dengan pemandangan samudera dan sunset terbaik.
           </p>
 
-          <!-- Form Pencarian / Booking Ringkas -->
-          <div class="search-box">
-            <div class="field">
-              <label>Check-in</label>
-              <input type="date" />
-            </div>
-            <div class="field">
-              <label>Check-out</label>
-              <input type="date" />
-            </div>
-            <div class="field">
-              <label>Tamu</label>
-              <select>
-                <option>1 Tamu</option>
-                <option>2 Tamu</option>
-                <option>3 Tamu</option>
-                <option>4+ Tamu</option>
-              </select>
-            </div>
-            <button class="btn-search">Cari Kamar</button>
-          </div>
+      
         </div>
 
         <!-- Kolom Kanan: Gambar dengan Bingkai Bening -->
         <div class="hero-image-col">
           <div class="hero-image-frame">
-            <img :src="resortImageUrl" alt="Aurea The Resort" class="hero-image" />
+            <img :src="resortImageUrl" alt="Velora Resort" class="hero-image" />
           </div>
         </div>
       </div>
@@ -128,18 +127,23 @@ const roomPhotos = {
         <div class="room-card" v-for="room in store.rooms" :key="room.id">
           <div class="room-art">
             <!-- Fallback gambar jika room.id tidak ada di roomPhotos -->
-            <img :src="roomPhotos[room.id] || resortImageUrl" :alt="room.name || 'Foto Kamar'" />
+            <img :src="room.photo || roomPhotos[room.id] || resortImageUrl" :alt="room.name || 'Foto Kamar'" />
           </div>
           <h3>{{ room.name }}</h3>
           <p class="desc">{{ room.desc }}</p>
-          <p class="meta">Maks {{ room.capacity }} tamu</p>
+          <p class="meta">Maks {{ room.capacity }} tamu · {{ room.availableCount }} unit tersedia</p>
           <div class="price-row">
             <div class="price">
               Rp{{ formatPrice(room.price) }}<small> / malam</small>
             </div>
-            <button class="book-btn" @click="goToBooking(room)">Pesan Kamar</button>
+            <button class="book-btn" :disabled="room.status !== 'tersedia'" @click="goToBooking(room)">
+              {{ room.status === 'tersedia' ? 'Pesan Kamar' : 'Tidak Tersedia' }}
+            </button>
           </div>
         </div>
+        <p v-if="loadingRooms" class="room-state">Memuat kamar...</p>
+        <p v-else-if="roomError" class="room-state room-error">{{ roomError }}</p>
+        <p v-else-if="store.rooms.length === 0" class="room-state">Belum ada tipe kamar di katalog.</p>
       </div>
     </section>
 
@@ -487,6 +491,10 @@ const roomPhotos = {
 .book-btn:hover {
   background: #0369a1;
 }
+
+.book-btn:disabled { background: #8b9893; cursor: not-allowed; }
+.room-state { grid-column: 1 / -1; margin: 0; padding: 24px; text-align: center; color: #475569; }
+.room-error { color: #a3402c; }
 
 /* =========================================
    REVIEWS SECTION

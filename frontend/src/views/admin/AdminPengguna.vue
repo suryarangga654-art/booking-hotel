@@ -19,7 +19,8 @@ const userForm = ref({
   nama: '',
   email: '',
   telepon: '',
-  role: 'tamu'
+  role: 'tamu',
+  password: '',
 })
 
 const menuItems = [
@@ -27,6 +28,7 @@ const menuItems = [
   { key: 'pemesanan', label: 'Pemesanan', icon: '📋', to: '/admin/pemesanan' },
   { key: 'kamar', label: 'Kamar', icon: '🛏️', to: '/admin/kamar' },
   { key: 'tipe-kamar', label: 'Tipe Kamar', icon: '🏷️', to: '/admin/tipe-kamar' },
+  { key: 'promo', label: 'Promo', icon: '🏷️', to: '/admin/promo' },
   { key: 'pembayaran', label: 'Pembayaran', icon: '💳', to: '/admin/pembayaran' },
   { key: 'ulasan', label: 'Ulasan', icon: '⭐', to: '/admin/ulasan' },
   { key: 'pengguna', label: 'Pengguna', icon: '👥', to: '/admin/pengguna' },
@@ -64,8 +66,8 @@ async function fetchData() {
       id: u.id,
       nama: u.name || u.nama || u.username || 'Tanpa Nama',
       email: u.email || '-',
-      telepon: u.phone || u.telepon || u.no_hp || '-',
-      role: u.role || 'tamu'
+      telepon: u.phone || u.no_telepon || u.telepon || u.no_hp || '-',
+      role: u.role || u.peran || 'tamu'
     }))
 
   } catch (err) {
@@ -93,7 +95,7 @@ const filteredUsers = computed(() => {
 
 function openAddModal() {
   editingUserId.value = null
-  userForm.value = { nama: '', email: '', telepon: '', role: 'tamu' }
+  userForm.value = { nama: '', email: '', telepon: '', role: 'tamu', password: '' }
   showModal.value = true
 }
 
@@ -103,7 +105,8 @@ function openEditModal(u) {
     nama: u.nama || '',
     email: u.email || '',
     telepon: u.telepon !== '-' ? u.telepon : '',
-    role: u.role || 'tamu'
+    role: u.role || 'tamu',
+    password: ''
   }
   showModal.value = true
 }
@@ -113,15 +116,19 @@ async function submitUser() {
     alert('Nama dan Email wajib diisi!')
     return
   }
+  if (!editingUserId.value && userForm.value.password.length < 8) {
+    alert('Kata sandi pengguna baru minimal 8 karakter.')
+    return
+  }
 
   saving.value = true
   const payload = {
     name: userForm.value.nama,
     nama: userForm.value.nama,
     email: userForm.value.email,
-    phone: userForm.value.telepon,
-    telepon: userForm.value.telepon,
-    role: userForm.value.role
+    no_telepon: userForm.value.telepon,
+    peran: userForm.value.role,
+    ...(editingUserId.value ? {} : { password: userForm.value.password })
   }
 
   try {
@@ -224,7 +231,12 @@ async function deleteUser(id) {
                   </td>
                   <td>
                     <button class="btn-link" @click="openEditModal(u)">Edit</button>
-                    <button class="btn-link danger" @click="deleteUser(u.id)">Hapus</button>
+                    <button
+                      class="btn-link danger"
+                      :disabled="u.role === 'admin'"
+                      :title="u.role === 'admin' ? 'Akun admin tidak dapat dihapus' : 'Hapus pengguna'"
+                      @click="deleteUser(u.id)"
+                    >Hapus</button>
                   </td>
                 </tr>
               </tbody>
@@ -251,6 +263,11 @@ async function deleteUser(id) {
         <div class="fieldset">
           <label>No. Telepon</label>
           <input v-model="userForm.telepon" type="text" placeholder="08123456789" />
+        </div>
+
+        <div v-if="!editingUserId" class="fieldset">
+          <label>Kata Sandi Awal</label>
+          <input v-model="userForm.password" type="password" minlength="8" autocomplete="new-password" required />
         </div>
 
         <div class="fieldset">
@@ -304,6 +321,7 @@ async function deleteUser(id) {
 .role-badge.tamu { background: #f1f5f9; color: #475569; }
 .btn-link { background: none; border: none; color: #0284c7; font-size: 13px; font-weight: 600; cursor: pointer; margin-right: 10px; }
 .btn-link.danger { color: #dc2626; }
+.btn-link:disabled { color: #94a3b8; cursor: not-allowed; text-decoration: none; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
 .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 420px; }
 .modal h3 { margin: 0 0 16px; font-family: Georgia, serif; color: #0f172a; }
@@ -313,4 +331,21 @@ async function deleteUser(id) {
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .btn-cancel { padding: 9px 16px; background: #e2e8f0; color: #334155; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
 .toast { position: fixed; bottom: 24px; right: 24px; background: #10b981; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 14px; z-index: 200; }
+@media (max-width: 900px) {
+  .admin-layout { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; padding: 12px; overflow-x: auto; }
+  .sidebar-brand { padding: 0 12px 0 0; margin: 0; border: 0; }
+  .sidebar-nav { flex-direction: row; flex: none; margin-left: 8px; }
+  .nav-item { padding: 10px; }
+  .nav-item span:last-child, .logout-btn span:last-child { display: none; }
+  .logout-btn { margin: 0 0 0 8px; padding: 10px; }
+  .main-content { padding: 18px; }
+}
+@media (max-width: 560px) {
+  .panel { padding: 14px; }
+  .panel-head { align-items: stretch; flex-direction: column; }
+  .search-input, .panel-head .btn-primary { width: 100%; }
+  .modal-backdrop { padding: 12px; }
+  .modal { max-height: 92vh; overflow-y: auto; }
+}
 </style>

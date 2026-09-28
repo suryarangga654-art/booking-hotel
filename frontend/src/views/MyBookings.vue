@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { store, bookingListStore } from '../store/store'
+import { store } from '../store/store'
 import api from '../utils/api'
 
 const router = useRouter()
@@ -13,57 +13,23 @@ const filterStatus = ref('semua')
 async function fetchBookings() {
   loading.value = true
   try {
-    // 1. DIUBAH: Gunakan endpoint prefix /tamu agar tidak kena 403 Forbidden
-    const res = await api.get('/tamu/pemesanan')
-    
-    // Sesuaikan penanganan struktur response dari Laravel
-    bookingList.value = res.data?.data || res.data || []
+    const res = await api.get('/my-bookings')
+    const items = res.data?.data || res.data || []
+    bookingList.value = (Array.isArray(items) ? items : []).map((item) => {
+      const detail = item.detail_pemesanan?.[0] || {}
+      return {
+        ...item,
+        tipe_kamar: detail.kamar?.tipe_kamar?.nama || 'Kamar',
+        tanggal_check_in: detail.tanggal_check_in,
+        tanggal_check_out: detail.tanggal_check_out,
+      }
+    })
   } catch (error) {
-    console.error('Gagal memuat pemesanan dari API, menggunakan data lokal/store:', error)
-    loadDummyData()
+    console.error('Gagal memuat pemesanan:', error)
+    bookingList.value = []
   } finally {
     loading.value = false
   }
-}
-
-function loadDummyData() {
-  if (bookingListStore && bookingListStore.value && bookingListStore.value.length > 0) {
-    bookingList.value = bookingListStore.value
-    return
-  }
-
-  bookingList.value = [
-    {
-      id: 1,
-      kode_pemesanan: 'VLR-20260910-001',
-      tipe_kamar: 'Suite Pesisir',
-      tanggal_check_in: '2026-09-20',
-      tanggal_check_out: '2026-09-22',
-      jumlah_total: 2500000,
-      status_pemesanan: 'dikonfirmasi',
-      status_pembayaran: 'lunas',
-    },
-    {
-      id: 2,
-      kode_pemesanan: 'VLR-20260908-002',
-      tipe_kamar: 'Kamar Rimba',
-      tanggal_check_in: '2026-09-14',
-      tanggal_check_out: '2026-09-16',
-      jumlah_total: 1300000,
-      status_pemesanan: 'menunggu',
-      status_pembayaran: 'belum_dibayar',
-    },
-    {
-      id: 3,
-      kode_pemesanan: 'VLR-20260820-003',
-      tipe_kamar: 'Villa Batu',
-      tanggal_check_in: '2026-08-25',
-      tanggal_check_out: '2026-08-28',
-      jumlah_total: 6300000,
-      status_pemesanan: 'check_out',
-      status_pembayaran: 'lunas',
-    },
-  ]
 }
 
 onMounted(() => {
