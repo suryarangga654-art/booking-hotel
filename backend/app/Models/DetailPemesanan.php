@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class DetailPemesanan extends Model
+{
+    use HasFactory;
+
+    protected $table = 'detail_pemesanan';
+    public $timestamps = false;
+
+    protected $fillable = [
+        'pemesanan_id',
+        'kamar_id',
+        'tanggal_check_in',
+        'tanggal_check_out',
+        'harga_per_malam',
+        'jumlah_harga',
+    ];
+
+    public function pemesanan()
+    {
+        return $this->belongsTo(Pemesanan::class, 'pemesanan_id');
+    }
+
+    public function kamar()
+    {
+        return $this->belongsTo(Kamar::class, 'kamar_id');
+    }
+}
