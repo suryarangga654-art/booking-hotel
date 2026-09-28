@@ -111,7 +111,7 @@ function closeDropdown() {
             <router-link to="/my-bookings" class="dropdown-item">
               <span>📋</span> Pemesanan Saya
             </router-link>
-            <router-link to="/ulasan/tulis" class="dropdown-item">
+            <router-link to="/ulasan" class="dropdown-item">
               <span>⭐</span> Tulis Ulasan
             </router-link>
             <hr />

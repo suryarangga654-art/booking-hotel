@@ -155,6 +155,19 @@ function jumlahMalam(booking) {
                 {{ statusPembayaranLabel[b.status_pembayaran] }}
               </span>
             </div>
+            <div class="booking-actions">
+              <router-link
+                v-if="b.status_pemesanan === 'check_out' && !b.ulasan"
+                :to="`/ulasan/${b.id}`"
+                class="review-link"
+              >
+                Tulis Ulasan
+              </router-link>
+              <span v-else-if="b.status_pemesanan !== 'check_out'" class="review-hint">
+                Ulasan tersedia setelah check-out.
+              </span>
+              <span v-else class="review-hint">Ulasan sudah dikirim.</span>
+            </div>
           </div>
         </div>
 
@@ -315,6 +328,11 @@ function jumlahMalam(booking) {
   padding-top: 14px;
   border-top: 1px solid #f1f5f9;
 }
+
+.booking-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.review-link { display: inline-flex; align-items: center; padding: 9px 13px; border-radius: 4px; background: #0f172a; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; }
+.review-link:hover { background: #1e293b; }
+.review-hint { color: #64748b; font-size: 12px; }
 
 .total-price {
   font-size: 1.1rem;

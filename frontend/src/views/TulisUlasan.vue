@@ -16,6 +16,18 @@ const loading = ref(false)
 const errorMsg = ref('')
 const submitted = ref(false)
 
+const statusPemesananLabel = {
+  menunggu: 'Menunggu',
+  dikonfirmasi: 'Dikonfirmasi',
+  check_in: 'Sedang menginap',
+  check_out: 'Check-out',
+  dibatalkan: 'Dibatalkan',
+}
+
+function canReview(booking) {
+  return booking.status_pemesanan === 'check_out' && !booking.ulasan
+}
+
 // Cek token auth
 const token = localStorage.getItem('token') || localStorage.getItem('velora_token')
 if (!token && !store.user) {
@@ -34,7 +46,12 @@ async function loadBookings() {
 
   // Jika ada param :id (pemesanan_id) di URL (/tulis-ulasan/:id)
   if (route.params.id) {
-    pemesananId.value = route.params.id
+    const bookingId = Number(route.params.id)
+    if (bookingsOptions.value.some((booking) => Number(booking.id) === bookingId && canReview(booking))) {
+      pemesananId.value = bookingId
+    } else {
+      errorMsg.value = 'Ulasan hanya tersedia untuk pemesanan yang sudah check-out dan belum pernah diulas.'
+    }
   }
 }
 
@@ -105,11 +122,17 @@ function backToHome() {
         <div class="fieldset">
           <label>Pilih Pemesanan</label>
           <select v-model="pemesananId">
-            <option value="" disabled>Pilih riwayat pemesanan kamu</option>
-            <option v-for="booking in bookingsOptions" :key="booking.id" :value="booking.id">
+            <option value="" disabled>
+              {{ bookingsOptions.length ? 'Pilih riwayat pemesanan kamu' : 'Belum ada riwayat pemesanan' }}
+            </option>
+            <option v-for="booking in bookingsOptions" :key="booking.id" :value="booking.id" :disabled="!canReview(booking)">
               Pemesanan #{{ booking.id }} - {{ booking.detail_pemesanan?.[0]?.kamar?.tipe_kamar?.nama || 'Kamar' }}
+              ({{ booking.ulasan ? 'Sudah diulas' : statusPemesananLabel[booking.status_pemesanan] || booking.status_pemesanan }})
             </option>
           </select>
+          <small v-if="!bookingsOptions.some(canReview)" class="field-hint">
+            Pilihan baru bisa digunakan setelah status pemesanan check-out dan belum pernah diulas.
+          </small>
         </div>
 
         <div class="fieldset">
