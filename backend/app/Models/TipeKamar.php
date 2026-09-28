@@ -2,15 +2,24 @@
 
 namespace App\Models;
 
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+=======
+
 use Illuminate\Database\Eloquent\Model;
 
 class TipeKamar extends Model
 {
+
     use HasFactory;
 
     protected $table = 'tipe_kamar';
     public $timestamps = false; // Hanya ada created_at di DDL
+=======
+    protected $table = 'tipe_kamar';
+
+    public $timestamps = false;
+
 
     protected $fillable = [
         'nama',
@@ -18,6 +27,7 @@ class TipeKamar extends Model
         'kapasitas',
         'deskripsi',
     ];
+
 
     public function hargaMusiman()
     {
@@ -33,4 +43,6 @@ class TipeKamar extends Model
     {
         return $this->hasMany(FotoTipeKamar::class, 'tipe_kamar_id');
     }
+=======
+
 }

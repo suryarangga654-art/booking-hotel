@@ -2,14 +2,21 @@
 
 namespace App\Models;
 
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+=======
+
 use Illuminate\Database\Eloquent\Model;
 
 class DetailPemesanan extends Model
 {
+
     use HasFactory;
 
     protected $table = 'detail_pemesanan';
+=======
+    protected $table = 'detail_pemesanan';
+
     public $timestamps = false;
 
     protected $fillable = [
@@ -19,6 +26,13 @@ class DetailPemesanan extends Model
         'tanggal_check_out',
         'harga_per_malam',
         'jumlah_harga',
+    ];
+
+
+=======
+    protected $casts = [
+        'tanggal_check_in' => 'date',
+        'tanggal_check_out' => 'date',
     ];
 
     public function pemesanan()

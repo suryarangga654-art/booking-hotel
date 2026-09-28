@@ -2,14 +2,22 @@
 
 namespace App\Models;
 
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+=======
+
 use Illuminate\Database\Eloquent\Model;
 
 class HargaMusiman extends Model
 {
+
     use HasFactory;
 
     protected $table = 'harga_musiman';
+=======
+    protected $table = 'harga_musiman';
+
+
     public $timestamps = false;
 
     protected $fillable = [

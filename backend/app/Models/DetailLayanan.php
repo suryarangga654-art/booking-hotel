@@ -2,14 +2,22 @@
 
 namespace App\Models;
 
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+=======
+>
 use Illuminate\Database\Eloquent\Model;
 
 class DetailLayanan extends Model
 {
+
     use HasFactory;
 
     protected $table = 'detail_layanan';
+=======
+    protected $table = 'detail_layanan';
+
+
     public $timestamps = false;
 
     protected $fillable = [
