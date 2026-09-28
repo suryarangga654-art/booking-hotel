@@ -51,6 +51,12 @@ const routes = [
     meta: { requiresAuth: true, allowedRoles: ['tamu', 'admin', 'resepsionis'] } 
   },
   { 
+    path: '/ulasan',
+    name: 'ulasan-list',
+    component: TulisUlasan,
+    meta: { requiresAuth: true, allowedRoles: ['tamu', 'admin', 'resepsionis'] },
+  },
+  { 
     path: '/ulasan/:id', 
     name: 'ulasan', 
     component: TulisUlasan, 

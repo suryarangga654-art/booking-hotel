@@ -7,6 +7,23 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Booking API Setup
+
+The API is mounted from `routes/api.php`. Configure an administrator without
+committing credentials by setting `ADMIN_NAME`, `ADMIN_EMAIL`, and
+`ADMIN_PASSWORD` in the backend `.env`, then run:
+
+```bash
+php artisan db:seed
+```
+
+The seeder uses `firstOrCreate`; it does not modify existing accounts. An
+optional guest account can be seeded with `SEED_USER_NAME`, `SEED_USER_EMAIL`,
+and `SEED_USER_PASSWORD`. Passwords must contain at least eight characters.
+
+Public registration always assigns the `tamu` role; never accept a role from
+the registration request. Admin user and payment endpoints require Sanctum.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

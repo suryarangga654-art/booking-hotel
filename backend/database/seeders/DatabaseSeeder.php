@@ -2,13 +2,21 @@
 
 namespace Database\Seeders;
 
+
+=======
 use App\Models\User;
 use App\Models\Room;
+
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
+
+    public function run(): void
+    {
+        $this->call(RoleUsersSeeder::class);
+=======
     /**
      * Seed the application's database.
      */
@@ -34,5 +42,6 @@ class DatabaseSeeder extends Seeder
             'password' => Hash::make('user123'),
             'role' => 'tamu',
         ]);
+
     }
 }

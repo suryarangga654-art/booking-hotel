@@ -4,7 +4,11 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
+
+    "content-hash": "7013311a1774a6a6dafd2d4653bbaa38",
+=======
     "content-hash": "d13bf0423e222a2df7ff06c4461e3102",
+
     "packages": [
         {
             "name": "brick/math",
@@ -6208,6 +6212,18 @@
     "packages-dev": [
         {
             "name": "composer/semver",
+
+            "version": "3.5.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/composer/semver.git",
+                "reference": "f7a296f4c4cf8cb8bb83e35d6951a406bb11afa5"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/composer/semver/zipball/f7a296f4c4cf8cb8bb83e35d6951a406bb11afa5",
+                "reference": "f7a296f4c4cf8cb8bb83e35d6951a406bb11afa5",
+=======
             "version": "3.4.4",
             "source": {
                 "type": "git",
@@ -6218,6 +6234,7 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/composer/semver/zipball/198166618906cb2de69b95d7d47e5fa8aa1b2b95",
                 "reference": "198166618906cb2de69b95d7d47e5fa8aa1b2b95",
+
                 "shasum": ""
             },
             "require": {
@@ -6259,7 +6276,11 @@
                     "homepage": "http://robbast.nl"
                 }
             ],
+
+            "description": "Version comparison library that offers utilities, version constraint parsing and validation.",
+=======
             "description": "Semver library that offers utilities, version constraint parsing and validation.",
+
             "keywords": [
                 "semantic",
                 "semver",
@@ -6269,7 +6290,11 @@
             "support": {
                 "irc": "ircs://irc.libera.chat:6697/composer",
                 "issues": "https://github.com/composer/semver/issues",
+
+                "source": "https://github.com/composer/semver/tree/3.5.0"
+=======
                 "source": "https://github.com/composer/semver/tree/3.4.4"
+
             },
             "funding": [
                 {
@@ -6281,7 +6306,11 @@
                     "type": "github"
                 }
             ],
+
+            "time": "2026-09-24T14:38:51+00:00"
+=======
             "time": "2025-08-20T19:15:30+00:00"
+
         },
         {
             "name": "fakerphp/faker",
@@ -6536,6 +6565,18 @@
         },
         {
             "name": "laravel/boost",
+
+            "version": "v2.10.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/laravel/boost.git",
+                "reference": "76c236d4eb7d51698f882d149bc367c1ebc0d078"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/laravel/boost/zipball/76c236d4eb7d51698f882d149bc367c1ebc0d078",
+                "reference": "76c236d4eb7d51698f882d149bc367c1ebc0d078",
+=======
             "version": "v2.9.0",
             "source": {
                 "type": "git",
@@ -6546,6 +6587,7 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/laravel/boost/zipball/ebe59d97cbc66b66f735e6ec7ff859233e7934e0",
                 "reference": "ebe59d97cbc66b66f735e6ec7ff859233e7934e0",
+
                 "shasum": ""
             },
             "require": {
@@ -6598,6 +6640,22 @@
                 "issues": "https://github.com/laravel/boost/issues",
                 "source": "https://github.com/laravel/boost"
             },
+
+            "time": "2026-09-23T09:33:31+00:00"
+        },
+        {
+            "name": "laravel/mcp",
+            "version": "v1.0.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/laravel/mcp.git",
+                "reference": "92987a9d03847801299ff4abe909ba7686147dde"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/laravel/mcp/zipball/92987a9d03847801299ff4abe909ba7686147dde",
+                "reference": "92987a9d03847801299ff4abe909ba7686147dde",
+=======
             "time": "2026-09-14T14:40:10+00:00"
         },
         {
@@ -6612,6 +6670,7 @@
                 "type": "zip",
                 "url": "https://api.github.com/repos/laravel/mcp/zipball/cfa4f38f82873eeb6848527883545f98f871e229",
                 "reference": "cfa4f38f82873eeb6848527883545f98f871e229",
+
                 "shasum": ""
             },
             "require": {
@@ -6672,7 +6731,11 @@
                 "issues": "https://github.com/laravel/mcp/issues",
                 "source": "https://github.com/laravel/mcp"
             },
+
+            "time": "2026-09-24T10:45:09+00:00"
+=======
             "time": "2026-09-14T14:35:19+00:00"
+
         },
         {
             "name": "laravel/pail",
